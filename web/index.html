@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Mô Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="gate" class="hide"></div>
+<div id="app" class="hide">
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="index.html"><b>Mô Hub</b><span>Vận hành Mô Đi Phê</span></a>
+      <div class="who" id="who"></div>
+    </header>
+
+    <h2>Trang cho khách</h2>
+    <div class="o-luoi" id="public"></div>
+
+    <h2>Vận hành</h2>
+    <div class="o-luoi">
+      <div class="o">
+        <h3><a href="viec.html">Giao việc</a></h3>
+        <div><span class="so" id="soMo">–</span> <span class="muted">việc đang mở</span></div>
+        <div class="muted" id="soTre"></div>
+        <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
+      </div>
+      <div class="o cho">
+        <h3>Đặt phòng</h3>
+        <p class="muted">Lịch thuê theo từng căn, hợp đồng, tiền cọc. Đang xây ở giai đoạn 2.</p>
+      </div>
+    </div>
+
+    <h2>Kho link gửi khách</h2>
+    <div id="links"></div>
+    <details id="addLink" class="hide" style="margin-top:12px">
+      <summary class="btn nho" style="display:inline-block">Thêm link</summary>
+      <div class="hang">
+        <div><label>Nhóm</label><input id="lGrp" placeholder="Mô House / Pháp lý / Bedding…"></div>
+        <div><label>Tên hiển thị</label><input id="lTitle" placeholder="Profile Nhà Sen"></div>
+      </div>
+      <label>Đường dẫn</label><input id="lUrl" type="url" placeholder="https://…">
+      <label>Ghi chú (không bắt buộc)</label><input id="lNote">
+      <button class="btn chinh" id="lSave" style="margin-top:12px">Lưu link</button>
+    </details>
+
+    <section id="members" class="hide">
+      <h2>Thành viên</h2>
+      <p class="muted">Người mới đăng nhập sẽ ở trạng thái chờ. Duyệt ở đây hoặc qua email/Telegram.</p>
+      <div id="memList"></div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const { sb, C, esc, $, toast, copy, vnToday } = Mo;
+
+Mo.gate(async (me) => {
+  // Trang công khai
+  $("#public").innerHTML = C.PUBLIC_SITES.map((s, i) => `
+    <div class="o">
+      <h3><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a></h3>
+      <p class="muted">${esc(s.note)}</p>
+      <div class="hanh-dong"><button class="btn nho" data-copy="${i}">Chép link</button>
+      <a class="btn nho" href="${esc(s.url)}" target="_blank" rel="noopener">Mở</a></div>
+    </div>`).join("");
+  $("#public").onclick = (e) => { const i = e.target.dataset.copy; if (i !== undefined) copy(C.PUBLIC_SITES[i].url); };
+
+  // Đếm việc
+  const { data: open } = await sb.from("tasks").select("due_date").eq("status", "open").is("deleted_at", null);
+  const today = vnToday();
+  $("#soMo").textContent = open?.length ?? 0;
+  const tre = (open ?? []).filter((t) => t.due_date && t.due_date < today).length;
+  $("#soTre").innerHTML = tre ? `<span style="color:var(--gach);font-weight:600">${tre} việc quá hạn</span>` : "Không có việc quá hạn";
+
+  loadLinks(me);
+  if (me.isAdmin) { $("#addLink").classList.remove("hide"); $("#members").classList.remove("hide"); loadMembers(); }
+
+  $("#lSave").onclick = async () => {
+    const row = { grp: $("#lGrp").value.trim() || "Chung", title: $("#lTitle").value.trim(), url: $("#lUrl").value.trim(), note: $("#lNote").value.trim() || null };
+    if (!row.title || !/^https?:\/\//.test(row.url)) return toast("Cần tên và link bắt đầu bằng http");
+    const { error } = await sb.from("share_links").insert(row);
+    if (error) return toast("Lỗi: " + error.message);
+    ["#lTitle", "#lUrl", "#lNote"].forEach((s) => ($(s).value = ""));
+    toast("Đã lưu link"); loadLinks(me);
+  };
+});
+
+async function loadLinks(me) {
+  const { data } = await sb.from("share_links").select("*").order("grp").order("sort").order("title");
+  if (!data?.length) return ($("#links").innerHTML = `<p class="muted">Chưa có link nào. ${me.isAdmin ? "Thêm link profile nhà, bảng giá, tài liệu… để lấy ra gửi khách nhanh." : ""}</p>`);
+  let html = "", grp = null;
+  for (const l of data) {
+    if (l.grp !== grp) { grp = l.grp; html += `<div class="nhom">${esc(grp)}</div>`; }
+    html += `<div class="link-hang"><div class="ten">${esc(l.title)}<small>${esc(l.note || l.url)}</small></div>
+      <button class="btn nho" data-copy="${esc(l.url)}">Chép</button>
+      <a class="btn nho" href="${esc(l.url)}" target="_blank" rel="noopener">Mở</a>
+      ${me.isAdmin ? `<button class="btn chu" data-del="${l.id}">Xóa</button>` : ""}</div>`;
+  }
+  $("#links").innerHTML = html;
+  $("#links").onclick = async (e) => {
+    if (e.target.dataset.copy) copy(e.target.dataset.copy);
+    if (e.target.dataset.del && confirm("Xóa link này?")) {
+      await sb.from("share_links").delete().eq("id", e.target.dataset.del); loadLinks(me);
+    }
+  };
+}
+
+async function loadMembers() {
+  const { data } = await sb.from("profiles").select("*").order("status").order("created_at", { ascending: false });
+  const st = { pending: "Chờ duyệt", approved: "Đã duyệt", rejected: "Từ chối" };
+  $("#memList").innerHTML = (data ?? []).map((p) => `
+    <div class="link-hang">
+      <div class="ten">${esc(p.full_name || "(chưa ghi tên)")}<small>${esc(p.email)} · ${st[p.status]}</small></div>
+      ${p.role === "admin" ? `<span class="muted">Quản trị</span>` : `
+      <select data-role="${p.id}" style="width:auto">
+        ${[["staff", "Nhân viên"], ["manager", "Quản lý"], ["viewer", "Chỉ xem"]].map(([v, n]) => `<option value="${v}" ${p.role === v ? "selected" : ""}>${n}</option>`).join("")}
+      </select>
+      ${p.status !== "approved" ? `<button class="btn nho reu" data-ok="${p.id}">Duyệt</button>` : ""}
+      ${p.status !== "rejected" ? `<button class="btn chu" data-no="${p.id}">Chặn</button>` : ""}`}
+    </div>`).join("");
+  $("#memList").onchange = async (e) => {
+    if (e.target.dataset.role) { await sb.from("profiles").update({ role: e.target.value }).eq("id", e.target.dataset.role); toast("Đã đổi vai trò"); }
+  };
+  $("#memList").onclick = async (e) => {
+    const id = e.target.dataset.ok || e.target.dataset.no;
+    if (!id) return;
+    const role = $(`select[data-role="${id}"]`).value;
+    await sb.from("profiles").update(e.target.dataset.ok ? { status: "approved", role } : { status: "rejected" }).eq("id", id);
+    toast(e.target.dataset.ok ? "Đã duyệt" : "Đã chặn"); loadMembers();
+  };
+}
+</script>
+</body>
+</html>

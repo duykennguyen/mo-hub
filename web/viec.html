@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Giao việc — Mô Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="gate" class="hide"></div>
+<div id="app" class="hide">
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="index.html"><b>Mô Hub</b><span>Giao việc</span></a>
+      <div class="who" id="who"></div>
+    </header>
+
+    <div class="cong-cu">
+      <select id="fNha"><option value="">Tất cả nhà</option></select>
+      <select id="fLoai">
+        <option value="">Mọi loại việc</option><option value="ky_thuat">Kỹ thuật</option>
+        <option value="buong_phong">Buồng phòng</option><option value="quan_ly">Quản lý</option><option value="khac">Khác</option>
+      </select>
+      <input id="fTim" type="search" placeholder="Tìm việc, người làm…">
+      <button class="btn chinh hide" id="btnThem">Thêm việc</button>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="open" class="on">Đang làm</button>
+      <button data-tab="done">Đã hoàn thành</button>
+      <button data-tab="log">Nhật ký thay đổi</button>
+      <button data-tab="trash" class="hide" id="tabTrash">Đã xóa</button>
+    </nav>
+    <div id="list"></div>
+  </div>
+</div>
+
+<dialog id="dlgViec">
+  <div class="dau"><h3 id="dlgTitle">Thêm việc</h3><button class="btn chu" data-close>Đóng</button></div>
+  <div class="than">
+    <label>Việc cần làm</label><input id="vTitle" maxlength="200">
+    <div class="hang">
+      <div><label>Nhà</label><select id="vNha"><option value="">Chung (không thuộc nhà nào)</option></select></div>
+      <div><label>Phòng / khu vực</label><input id="vLoc" placeholder="P2, sân thượng…"></div>
+      <div><label>Loại việc</label><select id="vLoai">
+        <option value="ky_thuat">Kỹ thuật</option><option value="buong_phong">Buồng phòng</option>
+        <option value="quan_ly">Quản lý</option><option value="khac">Khác</option></select></div>
+      <div><label>Mức độ</label><select id="vPri">
+        <option value="thuong">Bình thường</option><option value="cao">Gấp</option><option value="thap">Không gấp</option></select></div>
+      <div><label>Người làm</label><input id="vWho" list="team"></div>
+      <div><label>Hạn</label><input id="vDue" type="date"></div>
+    </div>
+    <label>Chi tiết</label><textarea id="vDetail"></textarea>
+  </div>
+  <div class="chan"><button class="btn" data-close>Hủy</button><button class="btn chinh" id="vSave">Lưu việc</button></div>
+</dialog>
+<datalist id="team"></datalist>
+
+<dialog id="dlgLog">
+  <div class="dau"><h3 id="logTitle">Lịch sử</h3><button class="btn chu" data-close>Đóng</button></div>
+  <div class="than" id="logBody"></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const { sb, esc, $, toast, vnToday, ddmm, when } = Mo;
+const LOAI = { ky_thuat: "Kỹ thuật", buong_phong: "Buồng phòng", quan_ly: "Quản lý", khac: "Khác" };
+const MUC = { cao: "Gấp", thuong: "Bình thường", thap: "Không gấp" };
+const TRUONG = { title: "Việc", detail: "Chi tiết", location: "Phòng", category: "Loại", priority: "Mức độ", assignee: "Người làm",
+  due_date: "Hạn", status: "Trạng thái", property_id: "Nhà", deleted_at: "Xóa" };
+const HANH_DONG = { tao: "tạo việc", sua: "sửa", xong: "đánh dấu xong", mo_lai: "mở lại", xoa: "xóa", khoi_phuc: "khôi phục" };
+
+let me, props = [], tasks = [], tab = "open", editing = null;
+const propName = (id) => props.find((p) => p.id === id)?.name ?? "Chung";
+
+Mo.gate(async (profile) => {
+  me = profile;
+  if (me.canEdit) $("#btnThem").classList.remove("hide");
+  if (me.isAdmin) $("#tabTrash").classList.remove("hide");
+  props = (await sb.from("properties").select("id,name,code").eq("active", true).order("sort")).data ?? [];
+  const opts = props.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  $("#fNha").insertAdjacentHTML("beforeend", opts + `<option value="none">Chung</option>`);
+  $("#vNha").insertAdjacentHTML("beforeend", opts);
+  const team = (await sb.rpc("list_team")).data ?? [];
+  $("#team").innerHTML = team.map((t) => `<option value="${esc(t.name)}">`).join("");
+
+  $("#tabs").onclick = (e) => {
+    if (!e.target.dataset.tab) return;
+    tab = e.target.dataset.tab;
+    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b === e.target));
+    load();
+  };
+  ["#fNha", "#fLoai"].forEach((s) => ($(s).onchange = render));
+  $("#fTim").oninput = render;
+  $("#btnThem").onclick = () => openForm(null);
+  $("#vSave").onclick = save;
+  document.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
+  $("#list").onclick = onListClick;
+  load();
+});
+
+async function load() {
+  if (tab === "log") return loadLog();
+  let q = sb.from("tasks").select("*");
+  if (tab === "trash") q = q.not("deleted_at", "is", null).order("deleted_at", { ascending: false });
+  else {
+    q = q.is("deleted_at", null).eq("status", tab);
+    q = tab === "open" ? q.order("due_date", { ascending: true, nullsFirst: false }).order("created_at")
+                       : q.order("done_at", { ascending: false }).limit(150);
+  }
+  const { data, error } = await q;
+  if (error) return toast("Lỗi tải: " + error.message);
+  tasks = data; render();
+}
+
+function render() {
+  if (tab === "log") return;
+  const nha = $("#fNha").value, loai = $("#fLoai").value, tim = $("#fTim").value.trim().toLowerCase();
+  const rows = tasks.filter((t) =>
+    (!nha || (nha === "none" ? !t.property_id : t.property_id === nha)) &&
+    (!loai || t.category === loai) &&
+    (!tim || `${t.title} ${t.detail ?? ""} ${t.assignee ?? ""} ${t.location ?? ""}`.toLowerCase().includes(tim)));
+  if (!rows.length) {
+    const msg = { open: "Không còn việc nào đang mở.", done: "Chưa có việc hoàn thành.", trash: "Không có việc bị xóa." }[tab];
+    return ($("#list").innerHTML = `<div class="trong">${msg}${tab === "open" && me.canEdit ? "<br>Bấm “Thêm việc” hoặc nhắn cho Thư kí trên Telegram." : ""}</div>`);
+  }
+  const groups = new Map();
+  for (const t of rows) { const k = t.property_id ?? "none"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+  const order = [...props.map((p) => p.id), "none"].filter((k) => groups.has(k));
+  $("#list").innerHTML = order.map((k) => `
+    <section class="nha">
+      <div class="nha-ten"><h3>${esc(k === "none" ? "Chung" : propName(k))}</h3><span class="muted">${groups.get(k).length} việc</span></div>
+      ${groups.get(k).map(taskRow).join("")}
+    </section>`).join("");
+}
+
+function taskRow(t) {
+  const today = vnToday();
+  const late = t.status === "open" && t.due_date && t.due_date < today;
+  const meta = [
+    t.location && esc(t.location),
+    LOAI[t.category],
+    t.assignee && "Người làm: " + esc(t.assignee),
+    t.due_date && `<span class="${late ? "tre" : ""}">${late ? "Quá hạn " : "Hạn "}${ddmm(t.due_date)}</span>`,
+    t.status === "done" && `Xong ${Mo.when(t.done_at)} — ${esc(t.done_by ?? "")}`,
+    t.source === "telegram" && "qua Thư kí",
+  ].filter(Boolean).map((m) => `<span>${m}</span>`).join("");
+  let btns = "";
+  if (tab === "open" && me.canEdit) btns += `<button class="btn nho reu" data-xong="${t.id}">Xong</button><button class="btn nho" data-sua="${t.id}">Sửa</button>`;
+  if (tab === "done" && me.canEdit) btns += `<button class="btn nho" data-mo="${t.id}">Mở lại</button>`;
+  if (tab === "trash") btns += `<button class="btn nho" data-khoiphuc="${t.id}">Khôi phục</button>`;
+  btns += `<button class="btn chu" data-ls="${t.id}">Lịch sử</button>`;
+  if (me.isAdmin && tab !== "trash") btns += `<button class="btn chu" data-xoa="${t.id}">Xóa</button>`;
+  return `<div class="viec ${t.status === "done" ? "xong" : ""}">
+    <span class="cham ${t.priority}" title="${MUC[t.priority]}"></span>
+    <div><div class="tieu-de">${esc(t.title)}</div><div class="meta">${meta}</div>
+      ${t.detail ? `<div class="chi-tiet">${esc(t.detail)}</div>` : ""}</div>
+    <div class="nut">${btns}</div></div>`;
+}
+
+async function update(id, patch, msg) {
+  const { error } = await sb.from("tasks").update(patch).eq("id", id);
+  if (error) return toast("Lỗi: " + error.message);
+  toast(msg); load();
+}
+
+function onListClick(e) {
+  const d = e.target.dataset;
+  if (d.xong) update(d.xong, { status: "done" }, "Đã chuyển sang Đã hoàn thành");
+  else if (d.mo) update(d.mo, { status: "open" }, "Đã mở lại việc");
+  else if (d.sua) openForm(tasks.find((t) => t.id == d.sua));
+  else if (d.xoa && confirm("Xóa việc này? Có thể khôi phục trong mục Đã xóa.")) update(d.xoa, { deleted_at: new Date().toISOString() }, "Đã xóa");
+  else if (d.khoiphuc) update(d.khoiphuc, { deleted_at: null }, "Đã khôi phục");
+  else if (d.ls) showHistory(Number(d.ls));
+}
+
+function openForm(t) {
+  editing = t;
+  $("#dlgTitle").textContent = t ? `Sửa việc #${t.id}` : "Thêm việc";
+  $("#vTitle").value = t?.title ?? "";
+  $("#vNha").value = t?.property_id ?? ($("#fNha").value !== "none" ? $("#fNha").value : "");
+  $("#vLoc").value = t?.location ?? "";
+  $("#vLoai").value = t?.category ?? ($("#fLoai").value || "ky_thuat");
+  $("#vPri").value = t?.priority ?? "thuong";
+  $("#vWho").value = t?.assignee ?? "";
+  $("#vDue").value = t?.due_date ?? "";
+  $("#vDetail").value = t?.detail ?? "";
+  $("#dlgViec").showModal(); $("#vTitle").focus();
+}
+
+async function save() {
+  const row = {
+    title: $("#vTitle").value.trim(), property_id: $("#vNha").value || null, location: $("#vLoc").value.trim() || null,
+    category: $("#vLoai").value, priority: $("#vPri").value, assignee: $("#vWho").value.trim() || null,
+    due_date: $("#vDue").value || null, detail: $("#vDetail").value.trim() || null,
+  };
+  if (!row.title) return toast("Ghi việc cần làm trước khi lưu");
+  $("#vSave").disabled = true;
+  const { error } = editing ? await sb.from("tasks").update(row).eq("id", editing.id) : await sb.from("tasks").insert(row);
+  $("#vSave").disabled = false;
+  if (error) return toast("Lỗi: " + error.message);
+  $("#dlgViec").close(); toast(editing ? "Đã lưu thay đổi" : "Đã thêm việc"); load();
+}
+
+function fmtVal(k, v) {
+  if (v === null || v === undefined || v === "") return "(trống)";
+  if (k === "category") return LOAI[v]; if (k === "priority") return MUC[v];
+  if (k === "status") return v === "done" ? "Xong" : "Đang làm";
+  if (k === "due_date") return ddmm(v); if (k === "property_id") return propName(v);
+  if (k === "deleted_at") return "có";
+  return esc(v);
+}
+function logItem(l, title) {
+  const changes = l.action === "sua" && l.changes
+    ? `<ul>${Object.entries(l.changes).map(([k, c]) => `<li>${TRUONG[k] ?? k}: ${fmtVal(k, c.cu)} → ${fmtVal(k, c.moi)}</li>`).join("")}</ul>` : "";
+  return `<div class="log"><b>${esc(l.actor)}</b> ${HANH_DONG[l.action] ?? l.action}${title ? ` “${esc(title)}”` : ""}
+    <div class="khi">${when(l.at)}</div>${changes}</div>`;
+}
+
+async function showHistory(id) {
+  const t = tasks.find((x) => x.id === id);
+  $("#logTitle").textContent = `Lịch sử việc #${id}`;
+  const { data } = await sb.from("task_log").select("*").eq("task_id", id).order("at", { ascending: false });
+  $("#logBody").innerHTML = (data ?? []).map((l) => logItem(l, null)).join("") || `<p class="muted">Chưa có lịch sử.</p>`;
+  $("#dlgLog").showModal();
+}
+
+async function loadLog() {
+  const { data } = await sb.from("task_log").select("*").order("at", { ascending: false }).limit(150);
+  const ids = [...new Set((data ?? []).map((l) => l.task_id))];
+  const titles = {};
+  if (ids.length) (await sb.from("tasks").select("id,title").in("id", ids)).data?.forEach((t) => (titles[t.id] = t.title));
+  $("#list").innerHTML = (data ?? []).map((l) => logItem(l, titles[l.task_id] ?? `#${l.task_id}`)).join("")
+    || `<div class="trong">Chưa có thay đổi nào.</div>`;
+}
+</script>
+</body>
+</html>

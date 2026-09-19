@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Duyệt truy cập — Mô Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="cong">
+  <h1>Duyệt truy cập</h1>
+  <p id="msg" class="muted"></p>
+  <button class="btn chinh hide" id="ok"></button>
+</div>
+<script src="config.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const role = q.get("r");
+const NAME = { staff: "Nhân viên (sửa & xác nhận việc)", manager: "Quản lý", viewer: "Chỉ xem", reject: "Từ chối truy cập" };
+const msg = document.getElementById("msg"), ok = document.getElementById("ok");
+if (!NAME[role]) msg.textContent = "Link không hợp lệ.";
+else {
+  msg.textContent = role === "reject" ? "Xác nhận từ chối người này?" : `Xác nhận cấp quyền: ${NAME[role]}?`;
+  ok.textContent = role === "reject" ? "Xác nhận từ chối" : "Xác nhận duyệt";
+  ok.classList.remove("hide");
+}
+ok.onclick = async () => {
+  ok.disabled = true;
+  const C = window.MO_CONFIG;
+  try {
+    const res = await fetch(`${C.SUPABASE_URL}/functions/v1/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: C.SUPABASE_ANON_KEY, Authorization: `Bearer ${C.SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ u: q.get("u"), r: role, e: q.get("e"), s: q.get("s") }),
+    });
+    const d = await res.json();
+    msg.textContent = d.ok
+      ? `${d.name || d.email} — ${role === "reject" ? "đã từ chối" : "đã được cấp quyền " + NAME[role]}.`
+      : d.error;
+    ok.classList.add("hide");
+  } catch { msg.textContent = "Không kết nối được máy chủ. Thử lại."; ok.disabled = false; }
+};
+</script>
+</body>
+</html>
