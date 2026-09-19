@@ -1,6 +1,7 @@
 -- =====================================================================
 -- MÔ HUB — GIAI ĐOẠN 1: Người dùng · Nhà · Giao việc · Nhật ký · Kho link
--- Chạy 1 lần trong Supabase > SQL Editor.
+-- Migration đầu tiên. Chạy bằng `npx supabase db push` hoặc dán vào SQL Editor (1 lần).
+-- ĐÃ CHẠY TRÊN DỰ ÁN THẬT THÌ KHÔNG SỬA FILE NÀY — muốn đổi thì tạo migration mới.
 -- =====================================================================
 
 -- ---------- Kiểu dữ liệu ----------
@@ -225,10 +226,4 @@ create policy "task_log: xem" on public.task_log for select using (can_read());
 create policy "share_links: xem" on public.share_links for select using (can_read());
 create policy "share_links: ghi" on public.share_links for all    using (is_admin()) with check (is_admin());
 
--- =====================================================================
--- DỮ LIỆU MẪU — SỬA THÀNH 9 NHÀ THẬT rồi chạy phần này
--- aliases: mọi cách anh hay gọi nhà đó khi nhắn tin (có dấu hoặc không dấu đều được)
--- =====================================================================
--- insert into public.properties (code, name, aliases, sort) values
---   ('SEN', 'Nhà Sen', '{sen,"nha sen"}', 1),
---   ('XXX', 'Tên nhà 2', '{bi danh 1,bi danh 2}', 2);
+-- Dữ liệu nhà: xem supabase/seed.example.sql (không để dữ liệu thật trong migration).

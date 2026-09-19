@@ -1,0 +1,21 @@
+# Cấu hình Supabase CLI cho Mô Hub.
+# Viết tay, tương đương `npx supabase init` nhưng chỉ giữ phần khác mặc định
+# (các mục không ghi thì CLI dùng giá trị mặc định).
+project_id = "mo-hub"
+
+[db.seed]
+# Chỉ dùng khi chạy `npx supabase db reset` (máy local) hoặc `db push --include-seed`.
+# File này chứa 9 nhà thật → đã gitignore. Mẫu: seed.example.sql
+enabled = true
+sql_paths = ["./seed.local.sql"]
+
+# Cả 3 hàm tự kiểm tra quyền bên trong (khóa publishable mới không phải JWT).
+# Tương đương cờ --no-verify-jwt khi deploy.
+[functions.request-access]
+verify_jwt = false
+
+[functions.approve]
+verify_jwt = false
+
+[functions.thuki-bot]
+verify_jwt = false

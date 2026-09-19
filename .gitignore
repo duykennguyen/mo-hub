@@ -1,0 +1,12 @@
+# Bí mật & biến môi trường — KHÔNG BAO GIỜ commit
+.env
+.env.*
+
+# Supabase CLI
+supabase/.temp/
+supabase/.branches/
+supabase/seed.local.sql
+
+node_modules/
+.DS_Store
+Thumbs.db
