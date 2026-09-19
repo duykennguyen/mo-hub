@@ -1,12 +1,17 @@
 /* Mô Hub — bảng màu thương hiệu Mô Đi Phê */
 :root {
-  --kem: #F7F3EA;       /* nền */
+  /* Bảng màu theo CLAUDE.md mục 8 — sửa màu ở đây, không rải mã màu trong file khác */
+  --kem: #F7F3EA;       /* nền giấy */
   --giay: #FFFDF8;      /* thẻ */
-  --gach: #9C3327;      /* nhấn, gấp, quá hạn */
-  --reu: #77815C;       /* nhãn, trạng thái tốt */
-  --muc: #2B2622;       /* chữ */
-  --tro: #7A716A;       /* chữ phụ */
-  --vien: #E4DCCB;
+  --gach: #9C3327;      /* đỏ gạch: tên, tiêu đề, gấp, quá hạn */
+  --gach-nhat: #C0674E; /* đỏ nhạt */
+  --reu: #77815C;       /* xanh sage: nhãn, trạng thái tốt */
+  --reu-dam: #5E6647;   /* sage đậm */
+  --muc: #3E3A33;       /* mực: chữ */
+  --tro: #6E6A60;       /* xám phụ */
+  --vien: #D9CFBE;      /* đường kẻ */
+  --hop-xanh: #ECEFE2;  /* nền hộp xanh */
+  --hop-do: #F6E9E4;    /* nền hộp đỏ */
   --serif: "Lora", Georgia, "Book Antiqua", serif;
   --sans: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -24,7 +29,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .wrap { max-width: 880px; margin: 0 auto; padding: 0 16px 64px; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0 14px; border-bottom: 1px solid var(--vien); margin-bottom: 8px; }
 .brand { display: flex; align-items: baseline; gap: 10px; text-decoration: none; color: var(--muc); }
-.brand b { font-family: var(--serif); font-size: 1.5rem; color: var(--gach); }
+.brand b { font-family: var(--serif); font-size: 1.5rem; color: var(--gach); white-space: nowrap; }
 .brand span { color: var(--tro); font-size: .9rem; }
 .who { font-size: .85rem; color: var(--tro); text-align: right; }
 .who button { margin-left: 8px; }
@@ -36,6 +41,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn:hover { border-color: var(--reu); }
 .btn.chinh { background: var(--gach); border-color: var(--gach); color: #fff; }
 .btn.reu { background: var(--reu); border-color: var(--reu); color: #fff; }
+.btn.reu:hover { background: var(--reu-dam); border-color: var(--reu-dam); }
 .btn.nho { padding: 4px 10px; font-size: .85rem; }
 .btn.chu { border: none; background: none; padding: 4px 6px; color: var(--tro); text-decoration: underline; }
 .btn:disabled { opacity: .5; cursor: default; }
@@ -95,7 +101,7 @@ textarea { min-height: 80px; resize: vertical; }
 
 /* Hộp thoại */
 dialog { border: 1px solid var(--vien); border-radius: 14px; padding: 0; width: min(560px, 94vw); background: var(--giay); color: var(--muc); }
-dialog::backdrop { background: rgba(43, 38, 34, .45); }
+dialog::backdrop { background: rgba(62, 58, 51, .45); } /* --muc 45% */
 dialog .dau { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--vien); }
 dialog .than { padding: 4px 18px 18px; max-height: 70vh; overflow-y: auto; }
 dialog .chan { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--vien); }
@@ -103,6 +109,8 @@ dialog .chan { display: flex; justify-content: flex-end; gap: 8px; padding: 12px
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--muc); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: .9rem; z-index: 99; }
 
 @media (max-width: 560px) {
+  .btn, .tabs button { min-height: 40px; } /* dễ bấm trên điện thoại */
+  .cong { margin: 8vh 12px 0; }
   .viec { grid-template-columns: 10px 1fr; }
   .viec .nut { grid-column: 2; justify-content: flex-start; margin-top: 6px; }
   .hang { grid-template-columns: 1fr; }
