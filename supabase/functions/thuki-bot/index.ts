@@ -1,6 +1,7 @@
 // THƯ KÍ — bot Telegram ghi việc vào Mô Hub. Miễn phí: phân tích bằng luật, không dùng AI trả phí.
 // Chỉ nói chuyện với ADMIN_CHAT_ID. Webhook bảo vệ bằng TELEGRAM_WEBHOOK_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { iso, noAccent, parseTask, vnToday } from "./parse.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
@@ -13,95 +14,7 @@ const tg = (method: string, body: unknown) =>
 // ---------------- Phân tích tin nhắn ----------------
 const CAT_LABEL: Record<string, string> = { ky_thuat: "🔧 Kỹ thuật", buong_phong: "🧺 Buồng phòng", quan_ly: "📋 Quản lý", khac: "📌 Khác" };
 const PRI_LABEL: Record<string, string> = { cao: "🔴 Gấp", thuong: "", thap: "⚪ Không gấp" };
-// Từ khóa có dấu để tránh trùng nghĩa (vd "mái" ≠ "mai", "đến" ≠ "đèn")
-const CAT_WORDS: Record<string, string[]> = {
-  quan_ly: ["khách", "hợp đồng", "thu tiền", "tiền cọc", "đặt cọc", "gia hạn", "chủ nhà", "giấy tờ", "hóa đơn", "hoá đơn",
-    "tiền điện", "tiền nước", "check in", "check-in", "check out", "check-out", "bàn giao", "thanh toán", "báo giá", "mua"],
-  buong_phong: ["dọn", "vệ sinh", "lau", "giặt", "thay ga", "ga giường", "drap", "chăn", "gối", "khăn", "hút bụi", "rác",
-    "setup phòng", "set up phòng", "xà phòng", "giấy vệ sinh", "amenities", "bụi", "mạng nhện"],
-  ky_thuat: ["sửa", "hỏng", "hư", "rỉ", "rò", "dột", "thấm", "điện", "đèn", "bóng đèn", "máy lạnh", "điều hòa", "điều hoà",
-    "ống", "bơm", "khóa", "khoá", "cửa", "thợ", "sơn", "wifi", "mạng", "tắc", "nghẹt", "vòi", "bồn cầu", "máy giặt",
-    "tủ lạnh", "nóng lạnh", "bình nóng", "công tắc", "ổ cắm", "mái", "quạt", "cầu dao", "aptomat"],
-};
-const B = "(?:^|[\\s,.;:!?()/\"'-])"; // ranh giới từ (Unicode-safe)
-const E = "(?=$|[\\s,.;:!?()/\"'-])";
-const has = (text: string, word: string) =>
-  new RegExp(B + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + E, "i").test(text);
-const noAccent = (s: string) =>
-  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
-
-function vnToday() {
-  const d = new Date(Date.now() + 7 * 3600e3); // giờ Việt Nam
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86400e3);
 const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
-
-function parseDue(t: string): string | null {
-  const today = vnToday();
-  if (has(t, "hôm nay") || has(t, "hnay") || has(t, "trong ngày")) return iso(today);
-  if (has(t, "ngày mai") || has(t, "mai")) return iso(addDays(today, 1));
-  if (has(t, "ngày kia") || has(t, "ngày mốt") || has(t, "mốt")) return iso(addDays(today, 2));
-  if (has(t, "cuối tuần")) return iso(addDays(today, (6 - today.getUTCDay() + 7) % 7 || 7));
-  if (has(t, "tuần sau")) return iso(addDays(today, 7));
-  // thứ 2..7, thứ hai..bảy, chủ nhật / cn
-  const names: Record<string, number> = { "hai": 1, "ba": 2, "tư": 3, "bốn": 3, "năm": 4, "sáu": 5, "bảy": 6 };
-  let wd: number | null = null;
-  const m = t.match(/thứ\s*([2-7]|hai|ba|tư|bốn|năm|sáu|bảy)(?=$|[\s,.;:!?)])/i);
-  if (m) wd = /\d/.test(m[1]) ? Number(m[1]) - 1 : names[m[1].toLowerCase()];
-  else if (has(t, "chủ nhật") || has(t, "cn")) wd = 0;
-  if (wd !== null) return iso(addDays(today, ((wd - today.getUTCDay() + 7) % 7) || 7));
-  // dd/mm hoặc dd/mm/yyyy
-  const d = t.match(/(?:^|\s)(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?(?=$|[\s,.;:!?)])/);
-  if (d) {
-    let y = d[3] ? Number(d[3].length === 2 ? "20" + d[3] : d[3]) : today.getUTCFullYear();
-    let date = new Date(Date.UTC(y, Number(d[2]) - 1, Number(d[1])));
-    if (!d[3] && date.getTime() < addDays(today, -30).getTime()) date = new Date(Date.UTC(++y, Number(d[2]) - 1, Number(d[1])));
-    if (!isNaN(date.getTime())) return iso(date);
-  }
-  return null;
-}
-
-function parseTask(raw: string, props: any[]) {
-  const t = raw.toLowerCase();
-  const plain = noAccent(raw);
-  // Nhà: khớp mã, tên hoặc bí danh (không phân biệt dấu); ưu tiên cụm dài nhất
-  // Lượt 1 khớp có dấu (chính xác); lượt 2 bỏ dấu, chỉ chạy khi lượt 1 không ra
-  let prop: any = null, best = 0;
-  for (const fold of [(x: string) => x.toLowerCase(), noAccent]) {
-    const hay = fold === noAccent ? plain : t;
-    for (const p of props) {
-      for (const k of [p.name, ...(p.aliases ?? [])].filter(Boolean)) {
-        const kw = fold(k);
-        if (fold === noAccent && kw.length < 5) continue; // bỏ dấu + quá ngắn dễ trùng ("may" ≈ "máy")
-        if (kw.length > best && has(hay, kw)) { prop = p; best = kw.length; }
-      }
-    }
-    if (prop) break;
-  }
-  // Loại việc: đếm từ khóa, nhiều nhất thắng
-  let category = "khac", top = 0;
-  for (const [cat, words] of Object.entries(CAT_WORDS)) {
-    const n = words.filter((w) => has(t, w)).length;
-    if (n > top) { category = cat; top = n; }
-  }
-  const priority = /không gấp|khi rảnh|từ từ|thong thả/.test(t) ? "thap"
-    : /gấp|khẩn|ngay lập tức|ưu tiên|urgent/.test(t) ? "cao" : "thuong";
-  const loc = raw.match(/(?:^|\s)(?:phòng|p\.?)\s?(\d{1,3})(?=$|[\s,.;:!?)])/i);
-  const [first, ...rest] = raw.trim().split("\n");
-  const title = first.length > 140 ? first.slice(0, 137) + "…" : first;
-  return {
-    property: prop,
-    row: {
-      property_id: prop?.id ?? null,
-      title: title.charAt(0).toUpperCase() + title.slice(1),
-      detail: [first.length > 140 ? first : "", rest.join("\n")].filter(Boolean).join("\n") || null,
-      location: loc ? "P" + loc[1] : null,
-      category, priority, due_date: parseDue(t), source: "telegram",
-    },
-  };
-}
 
 function summary(task: any, propName: string | null) {
   const due = task.due_date ? (() => { const d = new Date(task.due_date + "T00:00:00Z");
