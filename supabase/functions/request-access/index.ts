@@ -7,6 +7,8 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 const env = (k: string) => Deno.env.get(k) ?? "";
+// Tên do người dùng tự ghi → escape trước khi chèn vào HTML email
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 async function sign(payload: string) {
   const key = await crypto.subtle.importKey(
@@ -48,8 +50,8 @@ Deno.serve(async (req) => {
 
   // 1) Email qua Resend (gói miễn phí, gửi về chính email đăng ký Resend)
   if (env("RESEND_API_KEY")) {
-    const html = `<div style="font-family:Georgia,serif;color:#2b2622">
-      <p><b>${who}</b> xin truy cập Mô Hub.</p>
+    const html = `<div style="font-family:Georgia,serif;color:#3E3A33">
+      <p><b>${esc(who)}</b> xin truy cập Mô Hub.</p>
       ${links.map((l) => `<p><a href="${l.url}">${l.label}</a></p>`).join("")}
       <p style="color:#77815C;font-size:13px">Bấm link sẽ mở trang xác nhận — chưa có gì thay đổi cho tới khi anh bấm nút ở đó.</p></div>`;
     await fetch("https://api.resend.com/emails", {
