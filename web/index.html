@@ -32,9 +32,9 @@
         <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
       </div>
       <div class="o" id="oDatPhong">
-        <h3><a href="dat-phong.html">Đặt phòng</a></h3>
-        <p class="muted">Lịch thuê theo từng căn, hợp đồng, tiền cọc, lịch thu tiền.</p>
-        <div class="hanh-dong"><a class="btn" href="dat-phong.html">Mở lịch đặt phòng</a></div>
+        <h3><a id="lichLink1" href="dat-phong.html">Đặt phòng</a></h3>
+        <p class="muted">Mô House Calendar — lịch theo từng căn, hợp đồng, tiền cọc, lịch thu tiền, báo cáo.</p>
+        <div class="hanh-dong"><a class="btn" id="lichLink2" href="dat-phong.html">Mở lịch đặt phòng</a></div>
       </div>
     </div>
 
@@ -107,6 +107,12 @@ Mo.gate(async (me) => {
     if (me.can_see_public_sites === false) $("#secPublic").classList.add("hide");
     if (me.can_see_share_links === false) $("#secLinks").classList.add("hide");
     if (me.can_see_booking === false || !["manager", "viewer"].includes(me.role)) $("#oDatPhong").classList.add("hide");
+  }
+
+  // Lịch đặt phòng nằm ở site riêng; địa chỉ khai trong config.js để sau này đổi một chỗ
+  if (C.CALENDAR_URL) {
+    $("#lichLink1").href = C.CALENDAR_URL;
+    $("#lichLink2").href = C.CALENDAR_URL;
   }
 
   loadLinks(me);
