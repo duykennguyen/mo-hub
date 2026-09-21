@@ -50,14 +50,13 @@
         <option value="quan_ly">Quản lý</option><option value="khac">Khác</option></select></div>
       <div><label>Mức độ</label><select id="vPri">
         <option value="thuong">Bình thường</option><option value="cao">Gấp</option><option value="thap">Không gấp</option></select></div>
-      <div><label>Người làm</label><input id="vWho" list="team"></div>
+      <div><label>Người làm</label><select id="vWho"><option value="">Chưa giao ai</option></select></div>
       <div><label>Hạn</label><input id="vDue" type="date"></div>
     </div>
     <label>Chi tiết</label><textarea id="vDetail"></textarea>
   </div>
   <div class="chan"><button class="btn" data-close>Hủy</button><button class="btn chinh" id="vSave">Lưu việc</button></div>
 </dialog>
-<datalist id="team"></datalist>
 
 <dialog id="dlgLog">
   <div class="dau"><h3 id="logTitle">Lịch sử</h3><button class="btn chu" data-close>Đóng</button></div>
@@ -86,8 +85,10 @@ Mo.gate(async (profile) => {
   const opts = props.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
   $("#fNha").insertAdjacentHTML("beforeend", opts + `<option value="none">Chung</option>`);
   $("#vNha").insertAdjacentHTML("beforeend", opts);
-  const team = (await sb.rpc("list_team")).data ?? [];
-  $("#team").innerHTML = team.map((t) => `<option value="${esc(t.name)}">`).join("");
+  // Gán việc đích danh: người được gán luôn thấy việc của mình, kể cả khi bị giới hạn theo nhà
+  const team = (await sb.rpc("team_members")).data ?? [];
+  $("#vWho").insertAdjacentHTML("beforeend",
+    team.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join(""));
 
   $("#tabs").onclick = (e) => {
     if (!e.target.dataset.tab) return;
@@ -187,7 +188,7 @@ function openForm(t) {
   $("#vLoc").value = t?.location ?? "";
   $("#vLoai").value = t?.category ?? ($("#fLoai").value || "ky_thuat");
   $("#vPri").value = t?.priority ?? "thuong";
-  $("#vWho").value = t?.assignee ?? "";
+  $("#vWho").value = t?.assignee_id ?? "";
   $("#vDue").value = t?.due_date ?? "";
   $("#vDetail").value = t?.detail ?? "";
   $("#dlgViec").showModal(); $("#vTitle").focus();
@@ -196,7 +197,9 @@ function openForm(t) {
 async function save() {
   const row = {
     title: $("#vTitle").value.trim(), property_id: $("#vNha").value || null, location: $("#vLoc").value.trim() || null,
-    category: $("#vLoai").value, priority: $("#vPri").value, assignee: $("#vWho").value.trim() || null,
+    category: $("#vLoai").value, priority: $("#vPri").value,
+    assignee_id: $("#vWho").value || null,
+    assignee: $("#vWho").value ? $("#vWho").selectedOptions[0].textContent : null,
     due_date: $("#vDue").value || null, detail: $("#vDetail").value.trim() || null,
   };
   if (!row.title) return toast("Ghi việc cần làm trước khi lưu");
@@ -216,8 +219,10 @@ function fmtVal(k, v) {
   return esc(v);
 }
 function logItem(l, title) {
+  // assignee_id chỉ là mã nội bộ, đã có dòng "Người làm" bằng chữ nên bỏ qua cho dễ đọc
   const changes = l.action === "sua" && l.changes
-    ? `<ul>${Object.entries(l.changes).map(([k, c]) => `<li>${TRUONG[k] ?? k}: ${fmtVal(k, c.cu)} → ${fmtVal(k, c.moi)}</li>`).join("")}</ul>` : "";
+    ? `<ul>${Object.entries(l.changes).filter(([k]) => k !== "assignee_id")
+        .map(([k, c]) => `<li>${TRUONG[k] ?? k}: ${fmtVal(k, c.cu)} → ${fmtVal(k, c.moi)}</li>`).join("")}</ul>` : "";
   return `<div class="log"><b>${esc(l.actor)}</b> ${HANH_DONG[l.action] ?? l.action}${title ? ` “${esc(title)}”` : ""}
     <div class="khi">${when(l.at)}</div>${changes}</div>`;
 }

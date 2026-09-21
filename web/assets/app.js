@@ -33,6 +33,29 @@
   const nhoTen = (v) => { try { v ? localStorage.setItem(TEN_TAM, v) : localStorage.removeItem(TEN_TAM); } catch { /* trình duyệt chặn thì bỏ qua */ } };
   const layTen = () => { try { return localStorage.getItem(TEN_TAM) || ""; } catch { return ""; } };
 
+  // Nút Google: dùng chung cho cả Đăng nhập và Đăng ký.
+  // Google trả về email đã xác minh; Supabase gộp vào tài khoản cùng email nên
+  // người đã được duyệt không phải xin duyệt lại.
+  const nutGoogle = `<button class="btn" id="gg">Tiếp tục bằng Google</button>
+      <p class="muted">hoặc dùng email:</p>`;
+  function ganNutGoogle() {
+    const b = $("#gg");
+    if (!b) return;
+    b.onclick = async () => {
+      b.disabled = true;
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: veTrang() },
+      });
+      if (error) {
+        $("#msg").textContent = /provider is not enabled/i.test(error.message)
+          ? "Đăng nhập Google chưa được bật cho hệ thống. Dùng email bên dưới, hoặc báo quản trị viên."
+          : "Không mở được Google: " + error.message;
+        b.disabled = false;
+      }
+    };
+  }
+
   // Màn hình đầu: chọn Đăng nhập (đã có tài khoản) hay Đăng ký (lần đầu)
   function welcomeScreen() {
     renderGate(`
@@ -48,13 +71,15 @@
   function loginScreen() {
     renderGate(`
       <h1>Đăng nhập</h1>
-      <p class="muted">Nhập email đã đăng ký. Hệ thống gửi một link vào hộp thư, bấm link là vào.</p>
+      <p class="muted">Dùng tài khoản Google, hoặc nhận link đăng nhập qua email đã đăng ký.</p>
+      ${nutGoogle}
       <label for="em">Email</label>
       <input id="em" type="email" autocomplete="email" placeholder="ten@gmail.com">
       <button class="btn chinh" id="send">Gửi link đăng nhập</button>
       <p class="muted" id="msg"></p>
       <button class="btn chu" id="back">← Quay lại</button>`);
     $("#back").onclick = welcomeScreen;
+    ganNutGoogle();
     $("#send").onclick = async () => {
       const email = $("#em").value.trim();
       if (!hopLe(email)) return ($("#msg").textContent = "Email chưa đúng định dạng.");
@@ -77,15 +102,19 @@
   function registerScreen() {
     renderGate(`
       <h1>Đăng ký</h1>
-      <p class="muted">Điền tên và email. Sau khi bạn bấm link trong email, quản trị viên sẽ nhận được yêu cầu để duyệt.</p>
-      <label for="nm">Tên của bạn (để quản trị viên nhận ra)</label>
+      <p class="muted">Ghi tên để quản trị viên biết bạn là ai, rồi chọn cách xác nhận.</p>
+      <label for="nm">Tên của bạn</label>
       <input id="nm" value="${esc(layTen())}" placeholder="Ví dụ: Anh Tâm — kỹ thuật">
+      ${nutGoogle}
       <label for="em">Email</label>
       <input id="em" type="email" autocomplete="email" placeholder="ten@gmail.com">
       <button class="btn chinh" id="send">Gửi yêu cầu</button>
       <p class="muted" id="msg"></p>
       <button class="btn chu" id="back">← Quay lại</button>`);
     $("#back").onclick = welcomeScreen;
+    ganNutGoogle();
+    // Bấm Google cũng phải nhớ tên đã gõ, để sau khi quay về thì tự gửi yêu cầu duyệt
+    $("#nm").oninput = (e) => nhoTen(e.target.value.trim());
     $("#send").onclick = async () => {
       const name = $("#nm").value.trim();
       const email = $("#em").value.trim();

@@ -53,6 +53,10 @@ label { display: block; font-size: .85rem; color: var(--tro); margin: 10px 0 4px
 input, select, textarea { width: 100%; border: 1px solid var(--vien); border-radius: 8px; padding: 9px 11px; background: var(--giay); }
 textarea { min-height: 80px; resize: vertical; }
 .hang { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+/* Dòng có ô tick: ô vuông không bị kéo giãn như ô nhập */
+label.chon { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--muc); font-size: .95rem; }
+label.chon input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin: 0; accent-color: var(--nau-dam); }
+.nhom-nha { border-top: 1px solid var(--vien); margin-top: 14px; padding-top: 6px; }
 
 /* Cổng đăng nhập */
 .cong { max-width: 420px; margin: 12vh auto 0; background: var(--giay); border: 1px solid var(--vien); border-radius: 14px; padding: 28px 24px; }

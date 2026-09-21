@@ -18,8 +18,10 @@
       <div class="who" id="who"></div>
     </header>
 
-    <h2>Trang cho khách</h2>
-    <div class="o-luoi" id="public"></div>
+    <section id="secPublic">
+      <h2>Trang cho khách</h2>
+      <div class="o-luoi" id="public"></div>
+    </section>
 
     <h2>Vận hành</h2>
     <div class="o-luoi">
@@ -29,12 +31,13 @@
         <div class="muted" id="soTre"></div>
         <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
       </div>
-      <div class="o cho">
+      <div class="o cho" id="oDatPhong">
         <h3>Đặt phòng</h3>
         <p class="muted">Lịch thuê theo từng căn, hợp đồng, tiền cọc. Đang xây ở giai đoạn 2.</p>
       </div>
     </div>
 
+    <section id="secLinks">
     <h2>Kho link gửi khách</h2>
     <div id="links"></div>
     <details id="addLink" class="hide" style="margin-top:12px">
@@ -47,6 +50,7 @@
       <label>Ghi chú (không bắt buộc)</label><input id="lNote">
       <button class="btn chinh" id="lSave" style="margin-top:12px">Lưu link</button>
     </details>
+    </section>
 
     <section id="members" class="hide">
       <h2>Thành viên</h2>
@@ -55,6 +59,22 @@
     </section>
   </div>
 </div>
+
+<dialog id="dlgQuyen">
+  <div class="dau"><h3 id="qTen">Phân quyền</h3><button class="btn chu" data-close>Đóng</button></div>
+  <div class="than">
+    <p class="muted" id="qEmail"></p>
+    <label class="chon"><input type="checkbox" id="qSites"> Xem khối “Trang cho khách” (Mô House, Mô Bedding)</label>
+    <label class="chon"><input type="checkbox" id="qLinks"> Xem kho link gửi khách</label>
+    <label class="chon"><input type="checkbox" id="qBooking"> Xem Đặt phòng (khi giai đoạn 2 xong)</label>
+    <div class="nhom-nha">
+      <label class="chon"><input type="checkbox" id="qRestrict"> Chỉ được xem những nhà tick bên dưới</label>
+      <div id="qNha"></div>
+      <p class="muted">Không tick ô trên thì người này thấy mọi nhà. Việc được gán đích danh cho họ thì luôn thấy, kể cả ở nhà khác.</p>
+    </div>
+  </div>
+  <div class="chan"><button class="btn" data-close>Hủy</button><button class="btn chinh" id="qSave">Lưu phân quyền</button></div>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
@@ -78,10 +98,19 @@ Mo.gate(async (me) => {
   const today = vnToday();
   $("#soMo").textContent = open?.length ?? 0;
   const tre = (open ?? []).filter((t) => t.due_date && t.due_date < today).length;
-  $("#soTre").innerHTML = tre ? `<span style="color:var(--gach);font-weight:600">${tre} việc quá hạn</span>` : "Không có việc quá hạn";
+  $("#soTre").innerHTML = tre ? `<span style="color:var(--canh-bao);font-weight:600">${tre} việc quá hạn</span>` : "Không có việc quá hạn";
+
+  // Ẩn/hiện khối theo phân quyền (chặn thật nằm ở RLS trong database)
+  if (!me.isAdmin) {
+    // So sánh với false: nếu database chưa có cột (chưa chạy migration) thì vẫn hiện bình thường
+    if (me.can_see_public_sites === false) $("#secPublic").classList.add("hide");
+    if (me.can_see_share_links === false) $("#secLinks").classList.add("hide");
+    if (me.can_see_booking === false) $("#oDatPhong").classList.add("hide");
+  }
 
   loadLinks(me);
   if (me.isAdmin) { $("#addLink").classList.remove("hide"); $("#members").classList.remove("hide"); loadMembers(); }
+  document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
 
   $("#lSave").onclick = async () => {
     const row = { grp: $("#lGrp").value.trim() || "Chung", title: $("#lTitle").value.trim(), url: $("#lUrl").value.trim(), note: $("#lNote").value.trim() || null };
@@ -124,12 +153,14 @@ async function loadMembers() {
         ${[["staff", "Nhân viên"], ["manager", "Quản lý"], ["viewer", "Chỉ xem"]].map(([v, n]) => `<option value="${v}" ${p.role === v ? "selected" : ""}>${n}</option>`).join("")}
       </select>
       ${p.status !== "approved" ? `<button class="btn nho reu" data-ok="${p.id}">Duyệt</button>` : ""}
+      ${p.status === "approved" ? `<button class="btn nho" data-quyen="${p.id}">Phân quyền</button>` : ""}
       ${p.status !== "rejected" ? `<button class="btn chu" data-no="${p.id}">Chặn</button>` : ""}`}
     </div>`).join("");
   $("#memList").onchange = async (e) => {
     if (e.target.dataset.role) { await sb.from("profiles").update({ role: e.target.value }).eq("id", e.target.dataset.role); toast("Đã đổi vai trò"); }
   };
   $("#memList").onclick = async (e) => {
+    if (e.target.dataset.quyen) return openQuyen((data ?? []).find((p) => p.id === e.target.dataset.quyen));
     const id = e.target.dataset.ok || e.target.dataset.no;
     if (!id) return;
     const role = $(`select[data-role="${id}"]`).value;
@@ -137,6 +168,56 @@ async function loadMembers() {
     toast(e.target.dataset.ok ? "Đã duyệt" : "Đã chặn"); loadMembers();
   };
 }
+
+// ---------- Phân quyền từng người ----------
+let dangSua = null;   // hồ sơ đang mở trong hộp thoại
+
+async function openQuyen(p) {
+  if (!p) return;
+  dangSua = p;
+  $("#qTen").textContent = "Phân quyền — " + (p.full_name || p.email);
+  $("#qEmail").textContent = p.email;
+  $("#qSites").checked = p.can_see_public_sites;
+  $("#qLinks").checked = p.can_see_share_links;
+  $("#qBooking").checked = p.can_see_booking;
+  $("#qRestrict").checked = p.restrict_properties;
+
+  const [{ data: nha }, { data: duocGiao }] = await Promise.all([
+    sb.from("properties").select("id,name").eq("active", true).order("sort"),
+    sb.from("user_properties").select("property_id").eq("user_id", p.id),
+  ]);
+  const daChon = new Set((duocGiao ?? []).map((r) => r.property_id));
+  $("#qNha").innerHTML = (nha ?? []).map((n) => `
+    <label class="chon"><input type="checkbox" data-nha="${n.id}" ${daChon.has(n.id) ? "checked" : ""}> ${esc(n.name)}</label>`).join("")
+    || `<p class="muted">Chưa có nhà nào trong hệ thống.</p>`;
+  $("#dlgQuyen").showModal();
+}
+
+$("#qSave").onclick = async () => {
+  if (!dangSua) return;
+  const nhaChon = [...document.querySelectorAll("#qNha input[data-nha]:checked")].map((i) => i.dataset.nha);
+  if ($("#qRestrict").checked && !nhaChon.length)
+    return toast("Đã chọn giới hạn thì phải tick ít nhất một nhà");
+
+  const { error } = await sb.from("profiles").update({
+    can_see_public_sites: $("#qSites").checked,
+    can_see_share_links: $("#qLinks").checked,
+    can_see_booking: $("#qBooking").checked,
+    restrict_properties: $("#qRestrict").checked,
+  }).eq("id", dangSua.id);
+  if (error) return toast("Lỗi: " + error.message);
+
+  // Đặt lại danh sách nhà được giao cho đúng những ô đang tick
+  await sb.from("user_properties").delete().eq("user_id", dangSua.id);
+  if (nhaChon.length) {
+    const { error: e2 } = await sb.from("user_properties")
+      .insert(nhaChon.map((property_id) => ({ user_id: dangSua.id, property_id })));
+    if (e2) return toast("Lỗi khi lưu danh sách nhà: " + e2.message);
+  }
+  $("#dlgQuyen").close();
+  toast("Đã lưu phân quyền");
+  loadMembers();
+};
 </script>
 </body>
 </html>
