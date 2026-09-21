@@ -6,6 +6,8 @@ Hệ thống vận hành nội bộ của Mô Đi Phê (Hội An): giao việc t
 - Dữ liệu: Supabase (Postgres + đăng nhập + phân quyền theo dòng). Repo này **không chứa dữ liệu** — chỉ có code.
 - Toàn bộ dùng gói miễn phí.
 
+**Trang nội bộ:** https://duykennguyen.github.io/mo-hub/ (cần đăng nhập; chưa nối Supabase thì mới chỉ hiện màn hình đăng nhập)
+
 ## Bắt đầu
 
 - Cài đặt từng bước: [docs/HUONG-DAN-CAI-DAT.md](docs/HUONG-DAN-CAI-DAT.md)
