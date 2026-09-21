@@ -63,7 +63,8 @@
       <p class="muted">Hệ thống vận hành nội bộ Mô Đi Phê.</p>
       <button class="btn chinh" id="toLogin">Đăng nhập</button>
       <button class="btn" id="toReg">Đăng ký — lần đầu dùng</button>
-      <p class="muted">Máy này sẽ nhớ bạn, những lần sau mở là vào thẳng.</p>`);
+      <p class="muted">Máy này sẽ nhớ bạn, những lần sau mở là vào thẳng.</p>
+      <p class="muted"><a href="quyen-rieng-tu.html">Chính sách riêng tư</a> · <a href="dieu-khoan.html">Điều khoản sử dụng</a></p>`);
     $("#toLogin").onclick = loginScreen;
     $("#toReg").onclick = registerScreen;
   }
