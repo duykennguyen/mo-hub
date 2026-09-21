@@ -26,49 +26,113 @@
     g.innerHTML = `<div class="cong">${html}</div>`;
   }
 
-  function loginScreen() {
+  const hopLe = (email) => /^\S+@\S+\.\S+$/.test(email);
+  const veTrang = () => location.origin + location.pathname;
+  // Tên người đăng ký: giữ tạm ở máy để sau khi bấm link trong email thì tự gửi yêu cầu duyệt
+  const TEN_TAM = "mo_ten_dang_ky";
+  const nhoTen = (v) => { try { v ? localStorage.setItem(TEN_TAM, v) : localStorage.removeItem(TEN_TAM); } catch { /* trình duyệt chặn thì bỏ qua */ } };
+  const layTen = () => { try { return localStorage.getItem(TEN_TAM) || ""; } catch { return ""; } };
+
+  // Màn hình đầu: chọn Đăng nhập (đã có tài khoản) hay Đăng ký (lần đầu)
+  function welcomeScreen() {
     renderGate(`
       <h1>Mô Hub</h1>
-      <p class="muted">Hệ thống vận hành nội bộ Mô Đi Phê. Nhập email, hệ thống gửi link đăng nhập vào hộp thư của bạn.</p>
+      <p class="muted">Hệ thống vận hành nội bộ Mô Đi Phê.</p>
+      <button class="btn chinh" id="toLogin">Đăng nhập</button>
+      <button class="btn" id="toReg">Đăng ký — lần đầu dùng</button>
+      <p class="muted">Máy này sẽ nhớ bạn, những lần sau mở là vào thẳng.</p>`);
+    $("#toLogin").onclick = loginScreen;
+    $("#toReg").onclick = registerScreen;
+  }
+
+  function loginScreen() {
+    renderGate(`
+      <h1>Đăng nhập</h1>
+      <p class="muted">Nhập email đã đăng ký. Hệ thống gửi một link vào hộp thư, bấm link là vào.</p>
       <label for="em">Email</label>
       <input id="em" type="email" autocomplete="email" placeholder="ten@gmail.com">
       <button class="btn chinh" id="send">Gửi link đăng nhập</button>
-      <p class="muted" id="msg"></p>`);
+      <p class="muted" id="msg"></p>
+      <button class="btn chu" id="back">← Quay lại</button>`);
+    $("#back").onclick = welcomeScreen;
     $("#send").onclick = async () => {
       const email = $("#em").value.trim();
-      if (!/^\S+@\S+\.\S+$/.test(email)) return ($("#msg").textContent = "Email chưa đúng định dạng.");
+      if (!hopLe(email)) return ($("#msg").textContent = "Email chưa đúng định dạng.");
       $("#send").disabled = true;
-      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+      // shouldCreateUser: false → email lạ thì báo luôn, không âm thầm tạo tài khoản mới
+      const { error } = await sb.auth.signInWithOtp({
+        email, options: { emailRedirectTo: veTrang(), shouldCreateUser: false },
+      });
+      if (error && (error.code === "otp_disabled" || /signups not allowed/i.test(error.message))) {
+        $("#msg").innerHTML = `Email này chưa có tài khoản. Bấm <b>Đăng ký</b> để xin quyền truy cập.`;
+        $("#send").disabled = false;
+        return;
+      }
       $("#msg").textContent = error ? "Không gửi được: " + error.message
         : "Đã gửi. Mở email và bấm link — nên mở trên chính trình duyệt này.";
       $("#send").disabled = false;
     };
   }
 
+  function registerScreen() {
+    renderGate(`
+      <h1>Đăng ký</h1>
+      <p class="muted">Điền tên và email. Sau khi bạn bấm link trong email, quản trị viên sẽ nhận được yêu cầu để duyệt.</p>
+      <label for="nm">Tên của bạn (để quản trị viên nhận ra)</label>
+      <input id="nm" value="${esc(layTen())}" placeholder="Ví dụ: Anh Tâm — kỹ thuật">
+      <label for="em">Email</label>
+      <input id="em" type="email" autocomplete="email" placeholder="ten@gmail.com">
+      <button class="btn chinh" id="send">Gửi yêu cầu</button>
+      <p class="muted" id="msg"></p>
+      <button class="btn chu" id="back">← Quay lại</button>`);
+    $("#back").onclick = welcomeScreen;
+    $("#send").onclick = async () => {
+      const name = $("#nm").value.trim();
+      const email = $("#em").value.trim();
+      if (!name) return ($("#msg").textContent = "Ghi tên trước đã.");
+      if (!hopLe(email)) return ($("#msg").textContent = "Email chưa đúng định dạng.");
+      $("#send").disabled = true;
+      nhoTen(name);
+      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: veTrang() } });
+      $("#msg").textContent = error ? "Không gửi được: " + error.message
+        : "Đã gửi. Mở email và bấm link để xác nhận địa chỉ này là của bạn.";
+      $("#send").disabled = false;
+    };
+  }
+
   async function pendingScreen(p) {
+    const tenDaLuu = p.full_name || layTen();
     renderGate(`
       <h1>Đang chờ duyệt</h1>
-      <p class="muted">Tài khoản <b>${esc(p.email)}</b> đã đăng ký. Quản trị viên sẽ duyệt trước khi bạn xem được dữ liệu.</p>
+      <p class="muted">Tài khoản <b>${esc(p.email)}</b> đã đăng ký. Quản trị viên duyệt xong là bạn dùng được.</p>
       <label for="nm">Tên của bạn (để quản trị viên nhận ra)</label>
-      <input id="nm" value="${esc(p.full_name ?? "")}" placeholder="Ví dụ: Anh Tâm — kỹ thuật">
+      <input id="nm" value="${esc(tenDaLuu)}" placeholder="Ví dụ: Anh Tâm — kỹ thuật">
       <button class="btn chinh" id="req">Gửi yêu cầu duyệt</button>
       <button class="btn chu" id="out">Đăng xuất</button>
       <p class="muted" id="msg"></p>`);
-    $("#out").onclick = () => sb.auth.signOut().then(() => location.reload());
-    $("#req").onclick = async () => {
-      const name = $("#nm").value.trim();
-      if (!name) return ($("#msg").textContent = "Ghi tên trước khi gửi.");
+    $("#out").onclick = () => { nhoTen(""); sb.auth.signOut().then(() => location.reload()); };
+
+    const guiYeuCau = async (name) => {
       $("#req").disabled = true;
       await sb.rpc("set_my_name", { p_name: name });
       const { error } = await sb.functions.invoke("request-access");
-      $("#msg").textContent = error ? "Chưa gửi được thông báo, thử lại sau ít phút." : "Đã báo quản trị viên. Tải lại trang này sau khi được duyệt.";
+      $("#msg").textContent = error
+        ? "Chưa báo được quản trị viên, bấm lại sau ít phút."
+        : "Đã báo quản trị viên. Được duyệt rồi thì tải lại trang này là vào.";
       $("#req").disabled = false;
     };
+    $("#req").onclick = () => {
+      const name = $("#nm").value.trim();
+      if (!name) return ($("#msg").textContent = "Ghi tên trước khi gửi.");
+      guiYeuCau(name);
+    };
+    // Đã khai tên ở bước Đăng ký → tự gửi luôn, người dùng không phải bấm thêm
+    if (!p.full_name && layTen()) { nhoTen(""); await guiYeuCau(tenDaLuu); }
   }
 
   async function gate(onReady) {
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) return loginScreen();
+    if (!session) return welcomeScreen();
     let { data: p } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
     if (!p) { await new Promise((r) => setTimeout(r, 1200)); ({ data: p } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle()); }
     if (!p) return renderGate(`<h1>Lỗi hồ sơ</h1><p class="muted">Không tìm thấy hồ sơ tài khoản. Báo quản trị viên.</p>`);
