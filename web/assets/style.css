@@ -123,3 +123,40 @@ dialog .chan { background: var(--kem); display: flex; justify-content: flex-end;
   h1 { font-size: 1.4rem; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---------- Lịch đặt phòng (timeline) ---------- */
+.lich { overflow-x: auto; border: 1px solid var(--vien); border-radius: 12px; background: var(--giay); }
+.lich-hang { display: grid; position: relative; align-items: stretch; }
+.lich-hang.dau { position: sticky; top: 0; z-index: 3; background: var(--kem); }
+.lich .ten-can { position: sticky; left: 0; z-index: 2; background: var(--giay); border-right: 1px solid var(--vien);
+  padding: 6px 10px; font-size: .88rem; display: flex; align-items: center; min-height: 40px; }
+.lich-hang.dau .ten-can { background: var(--kem); }
+.lich .nha-nhom { font-family: var(--serif); color: var(--nau-dam); background: var(--kem);
+  padding: 6px 10px; font-size: .95rem; position: sticky; left: 0; }
+.lich .o-ngay { border-right: 1px solid var(--vien); border-bottom: 1px solid var(--vien); min-height: 40px; cursor: pointer; }
+.lich .o-ngay:hover { background: var(--kem); }
+.lich .o-ngay.nghi { background: var(--nen); }
+.lich .o-ngay.nay { box-shadow: inset 2px 0 0 var(--canh-bao); }
+.lich .nhan-ngay { font-size: .72rem; color: var(--tro); text-align: center; padding: 4px 0; line-height: 1.25; }
+.lich .nhan-ngay b { display: block; color: var(--muc); font-size: .8rem; }
+.lop-thanh { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; }
+.thanh { position: absolute; top: 4px; height: 32px; border-radius: 6px; color: #fff; font-size: .78rem;
+  padding: 0 8px; display: flex; align-items: center; overflow: hidden; white-space: nowrap;
+  pointer-events: auto; cursor: pointer; border: none; }
+.thanh.giu_cho { background: var(--reu); }
+.thanh.da_coc  { background: var(--reu-dam); }
+.thanh.dang_o  { background: var(--nau-dam); }
+.thanh.ket_thuc { background: var(--tro); }
+.chu-thich { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .82rem; color: var(--tro); margin: 10px 0; }
+.chu-thich span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.chu-thich .giu_cho::before { background: var(--reu); }
+.chu-thich .da_coc::before  { background: var(--reu-dam); }
+.chu-thich .dang_o::before  { background: var(--nau-dam); }
+.chu-thich .ket_thuc::before { background: var(--tro); }
+
+/* Bảng lịch thu tiền */
+.tien { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.tien th { text-align: left; font-weight: 500; color: var(--tro); font-size: .8rem; padding: 6px 8px; border-bottom: 1px solid var(--vien); }
+.tien td { padding: 6px 8px; border-bottom: 1px solid var(--vien); }
+.tien td.so { text-align: right; white-space: nowrap; }
+.tien tr.tre td { color: var(--canh-bao); }

@@ -31,9 +31,10 @@
         <div class="muted" id="soTre"></div>
         <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
       </div>
-      <div class="o cho" id="oDatPhong">
-        <h3>Đặt phòng</h3>
-        <p class="muted">Lịch thuê theo từng căn, hợp đồng, tiền cọc. Đang xây ở giai đoạn 2.</p>
+      <div class="o" id="oDatPhong">
+        <h3><a href="dat-phong.html">Đặt phòng</a></h3>
+        <p class="muted">Lịch thuê theo từng căn, hợp đồng, tiền cọc, lịch thu tiền.</p>
+        <div class="hanh-dong"><a class="btn" href="dat-phong.html">Mở lịch đặt phòng</a></div>
       </div>
     </div>
 
@@ -105,7 +106,7 @@ Mo.gate(async (me) => {
     // So sánh với false: nếu database chưa có cột (chưa chạy migration) thì vẫn hiện bình thường
     if (me.can_see_public_sites === false) $("#secPublic").classList.add("hide");
     if (me.can_see_share_links === false) $("#secLinks").classList.add("hide");
-    if (me.can_see_booking === false) $("#oDatPhong").classList.add("hide");
+    if (me.can_see_booking === false || !["manager", "viewer"].includes(me.role)) $("#oDatPhong").classList.add("hide");
   }
 
   loadLinks(me);
