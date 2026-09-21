@@ -38,6 +38,7 @@ const CASES: [string, Expect][] = [
   ["thu tiền phòng khách P4 cuối tháng", { category: "quan_ly", location: "P4", due_date: null }],
   ["thu tiền điện nước nhà mây", { nha: "may", category: "quan_ly" }], // 2 từ quản lý > 1 từ kỹ thuật
   ["nhà sen giặt chăn gối, hút bụi sofa", { nha: "sen", category: "buong_phong" }],
+  ["nhà sen hồ bơi đục nước, gọi bên bảo trì", { nha: "sen", category: "ky_thuat" }],
   ["nhà sen gửi hợp đồng gia hạn cho khách", { nha: "sen", category: "quan_ly" }],
 
   // --- Hạn ---

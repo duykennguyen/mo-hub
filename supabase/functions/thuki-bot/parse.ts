@@ -9,7 +9,8 @@ export const CAT_WORDS: Record<string, string[]> = {
     "setup phòng", "set up phòng", "xà phòng", "giấy vệ sinh", "amenities", "bụi", "mạng nhện"],
   ky_thuat: ["sửa", "hỏng", "hư", "rỉ", "rò", "dột", "thấm", "điện", "đèn", "bóng đèn", "máy lạnh", "điều hòa", "điều hoà",
     "ống", "bơm", "khóa", "khoá", "cửa", "thợ", "sơn", "wifi", "mạng", "tắc", "nghẹt", "vòi", "bồn cầu", "máy giặt",
-    "tủ lạnh", "nóng lạnh", "bình nóng", "công tắc", "ổ cắm", "mái", "quạt", "cầu dao", "aptomat"],
+    "tủ lạnh", "nóng lạnh", "bình nóng", "công tắc", "ổ cắm", "mái", "quạt", "cầu dao", "aptomat",
+    "hồ bơi", "bể bơi", "lọc nước", "đục nước", "thang máy"],
 };
 const B = "(?:^|[\\s,.;:!?()/\"'-])"; // ranh giới từ (Unicode-safe)
 const E = "(?=$|[\\s,.;:!?()/\"'-])";
