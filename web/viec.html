@@ -7,7 +7,7 @@
 <title>Giao việc — Mô Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css?v=1">
+<link rel="stylesheet" href="assets/style.css?v=2">
 </head>
 <body>
 <div id="gate" class="hide"></div>
@@ -64,8 +64,8 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=1"></script>
-<script src="assets/app.js?v=1"></script>
+<script src="config.js?v=2"></script>
+<script src="assets/app.js?v=2"></script>
 <script>
 const { sb, esc, $, toast, vnToday, ddmm, when } = Mo;
 const LOAI = { ky_thuat: "Kỹ thuật", buong_phong: "Buồng phòng", quan_ly: "Quản lý", khac: "Khác" };
@@ -150,6 +150,7 @@ function taskRow(t) {
     t.due_date && `<span class="${late ? "tre" : ""}">${late ? "Quá hạn " : "Hạn "}${ddmm(t.due_date)}</span>`,
     t.status === "done" && `Xong ${Mo.when(t.done_at)} — ${esc(t.done_by ?? "")}`,
     t.source === "telegram" && "qua Thư kí",
+    t.source === "canh_bao" && "hệ thống tự nhắc",
   ].filter(Boolean).map((m) => `<span>${m}</span>`).join("");
   let btns = "";
   if (tab === "open" && me.canEdit) btns += `<button class="btn nho reu" data-xong="${t.id}">Xong</button><button class="btn nho" data-sua="${t.id}">Sửa</button>`;

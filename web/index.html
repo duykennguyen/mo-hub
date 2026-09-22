@@ -7,7 +7,7 @@
 <title>Mô Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css?v=1">
+<link rel="stylesheet" href="assets/style.css?v=2">
 </head>
 <body>
 <div id="gate" class="hide"></div>
@@ -17,6 +17,11 @@
       <a class="brand" href="index.html"><b>Mô Hub</b><span>Vận hành Mô Đi Phê</span></a>
       <div class="who" id="who"></div>
     </header>
+
+    <section id="secHomNay">
+      <h2>Cần xử lý hôm nay</h2>
+      <div class="o-luoi" id="homNay"><p class="muted">Đang xem…</p></div>
+    </section>
 
     <section id="secPublic">
       <h2>Trang cho khách</h2>
@@ -35,6 +40,11 @@
         <h3><a id="lichLink1" href="dat-phong.html">Đặt phòng</a></h3>
         <p class="muted">Mô House Calendar — lịch theo từng căn, hợp đồng, tiền cọc, lịch thu tiền, báo cáo.</p>
         <div class="hanh-dong"><a class="btn" id="lichLink2" href="dat-phong.html">Mở lịch đặt phòng</a></div>
+      </div>
+      <div class="o hide" id="oNha">
+        <h3><a href="nha.html">Quản lý nhà</a></h3>
+        <p class="muted">Tên nhà và các căn, giá niêm yết, bí danh cho Thư kí, bật/tắt xuất bản ra trang khách.</p>
+        <div class="hanh-dong"><a class="btn" href="nha.html">Mở quản lý nhà</a></div>
       </div>
     </div>
 
@@ -78,10 +88,10 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=1"></script>
-<script src="assets/app.js?v=1"></script>
+<script src="config.js?v=2"></script>
+<script src="assets/app.js?v=2"></script>
 <script>
-const { sb, C, esc, $, toast, copy, vnToday } = Mo;
+const { sb, C, esc, $, toast, copy, vnToday, ddmm } = Mo;
 
 Mo.gate(async (me) => {
   // Trang công khai
@@ -95,11 +105,12 @@ Mo.gate(async (me) => {
   $("#public").onclick = (e) => { const i = e.target.dataset.copy; if (i !== undefined) copy(C.PUBLIC_SITES[i].url); };
 
   // Đếm việc
-  const { data: open } = await sb.from("tasks").select("due_date").eq("status", "open").is("deleted_at", null);
+  const { data: open } = await sb.from("tasks").select("id,title,due_date,priority").eq("status", "open").is("deleted_at", null);
   const today = vnToday();
   $("#soMo").textContent = open?.length ?? 0;
   const tre = (open ?? []).filter((t) => t.due_date && t.due_date < today).length;
   $("#soTre").innerHTML = tre ? `<span style="color:var(--canh-bao);font-weight:600">${tre} việc quá hạn</span>` : "Không có việc quá hạn";
+  canXuLy(me, open ?? [], today);
 
   // Ẩn/hiện khối theo phân quyền (chặn thật nằm ở RLS trong database)
   if (!me.isAdmin) {
@@ -116,7 +127,11 @@ Mo.gate(async (me) => {
   }
 
   loadLinks(me);
-  if (me.isAdmin) { $("#addLink").classList.remove("hide"); $("#members").classList.remove("hide"); loadMembers(); }
+  if (me.isAdmin) {
+    $("#addLink").classList.remove("hide"); $("#members").classList.remove("hide");
+    $("#oNha").classList.remove("hide");
+    loadMembers();
+  }
   document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
 
   $("#lSave").onclick = async () => {
@@ -128,6 +143,67 @@ Mo.gate(async (me) => {
     toast("Đã lưu link"); loadLinks(me);
   };
 });
+
+// ---------- Cần xử lý hôm nay ----------
+// Việc thì ai cũng thấy (RLS đã lọc sẵn). Phần khách và tiền chỉ gọi khi người này
+// có quyền xem đặt phòng — gọi khi không có quyền thì database ném lỗi.
+async function canXuLy(me, viec, today) {
+  const o = [];
+  const tre = viec.filter((t) => t.due_date && t.due_date < today);
+  const nay = viec.filter((t) => t.due_date === today);
+  const gap = viec.filter((t) => t.priority === "cao" && !t.due_date);
+  if (tre.length || nay.length || gap.length) {
+    const ds = [...tre, ...nay, ...gap].slice(0, 4);
+    o.push(`<div class="o">
+      <h3><a href="viec.html">Việc phải làm</a></h3>
+      <div>${tre.length ? `<span class="so" style="color:var(--canh-bao)">${tre.length}</span> <span class="muted">quá hạn</span> ` : ""}
+        ${nay.length ? `<span class="so">${nay.length}</span> <span class="muted">đến hạn hôm nay</span>` : ""}</div>
+      <ul class="tom-tat">${ds.map((t) => `<li>${esc(t.title)}</li>`).join("")}</ul>
+      <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
+    </div>`);
+  }
+
+  const xemDuocBooking = ["admin", "manager", "viewer"].includes(me.role) && me.can_see_booking !== false;
+  if (xemDuocBooking) {
+    const { data: bc, error } = await sb.rpc("bao_cao_ngay");
+    if (error) {
+      o.push(`<div class="o"><h3>Khách hôm nay</h3><p class="muted">Chưa đọc được số liệu đặt phòng: ${esc(error.message)}</p></div>`);
+    } else {
+      const nhan = bc.nhan_phong ?? [], tra = bc.tra_phong ?? [], oLai = bc.dang_o ?? [];
+      if (nhan.length || tra.length) {
+        o.push(`<div class="o">
+          <h3>Khách hôm nay</h3>
+          <div><span class="so">${nhan.length}</span> <span class="muted">nhận phòng</span> ·
+               <span class="so">${tra.length}</span> <span class="muted">trả phòng</span></div>
+          <ul class="tom-tat">${[...nhan.map((b) => `Nhận: ${b.can} — ${b.khach}`),
+                                 ...tra.map((b) => `Trả: ${b.can} — ${b.khach}`)]
+            .slice(0, 4).map((s) => `<li>${esc(s)}</li>`).join("")}</ul>
+          <div class="muted">${oLai.length} căn đang có khách ở</div>
+        </div>`);
+      }
+      const qh = bc.qua_han ?? {};
+      if (qh.so_khoan) {
+        o.push(`<div class="o">
+          <h3>Khoản thu quá hạn</h3>
+          <div><span class="so" style="color:var(--canh-bao)">${qh.so_khoan}</span> <span class="muted">khoản</span></div>
+          <div style="color:var(--canh-bao);font-weight:600">${Number(qh.tong || 0).toLocaleString("vi-VN")} đ chưa thu</div>
+          <div class="hanh-dong"><a class="btn" href="${esc(C.CALENDAR_URL || "dat-phong.html")}">Mở lịch thu tiền</a></div>
+        </div>`);
+      }
+      const het = bc.sap_het_han ?? [];
+      if (het.length) {
+        o.push(`<div class="o">
+          <h3>Hợp đồng sắp hết hạn</h3>
+          <div><span class="so">${het.length}</span> <span class="muted">trong 7 ngày tới</span></div>
+          <ul class="tom-tat">${het.slice(0, 4).map((b) => `<li>${esc(b.can)} — ${esc(b.khach)} · ${ddmm(b.den_ngay)}</li>`).join("")}</ul>
+        </div>`);
+      }
+    }
+  }
+
+  $("#homNay").innerHTML = o.length ? o.join("")
+    : `<p class="muted">Hôm nay không có việc quá hạn, không có khách vào ra, không có khoản thu tới hạn.</p>`;
+}
 
 async function loadLinks(me) {
   const { data } = await sb.from("share_links").select("*").order("grp").order("sort").order("title");

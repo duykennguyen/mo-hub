@@ -71,6 +71,8 @@ label.chon input[type="checkbox"] { width: 18px; height: 18px; flex: none; margi
 .o .hanh-dong { margin-top: auto; display: flex; gap: 8px; padding-top: 8px; }
 .o.cho { opacity: .6; }
 .so { font-family: var(--serif); font-size: 1.6rem; color: var(--nau); }
+.tom-tat { margin: 6px 0 0; padding-left: 18px; color: var(--tro); font-size: .88rem; }
+.tom-tat li { margin: 2px 0; }
 .link-hang { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--vien); }
 .link-hang .ten { flex: 1; min-width: 0; }
 .link-hang .ten small { display: block; color: var(--tro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -116,6 +118,7 @@ dialog .chan { background: var(--kem); display: flex; justify-content: flex-end;
 
 @media (max-width: 560px) {
   .btn, .tabs button { min-height: 40px; } /* dễ bấm trên điện thoại */
+  .nha-ten { flex-wrap: wrap; }            /* tên nhà dài thì xuống dòng, không bị ép hẹp */
   .cong { margin: 8vh 12px 0; }
   .viec { grid-template-columns: 10px 1fr; }
   .viec .nut { grid-column: 2; justify-content: flex-start; margin-top: 6px; }
