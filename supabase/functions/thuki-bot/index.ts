@@ -2,14 +2,19 @@
 // Chỉ nói chuyện với ADMIN_CHAT_ID. Webhook bảo vệ bằng TELEGRAM_WEBHOOK_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { iso, noAccent, parseTask, vnToday } from "./parse.ts";
+import { guiBaoCao, lenhDat, lenhDoiNgay, lenhHuy, xuLyDatPhong, xuLyNutBooking, type Ctx } from "./booking-bot.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
 const TG = `https://api.telegram.org/bot${env("TELEGRAM_BOT_TOKEN")}`;
 const HUB = env("HUB_URL").replace(/\/$/, "");
+// Lịch đặt phòng nằm ở site riêng Mô House Calendar
+const LICH = (env("CALENDAR_URL") || "https://duykennguyen.github.io/mo-house-calendar/").replace(/\/$/, "");
 
 const tg = (method: string, body: unknown) =>
   fetch(`${TG}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+const ctx: Ctx = { db, tg, HUB, LICH };
 
 // ---------------- Phân tích tin nhắn ----------------
 const CAT_LABEL: Record<string, string> = { ky_thuat: "🔧 Kỹ thuật", buong_phong: "🧺 Buồng phòng", quan_ly: "📋 Quản lý", khac: "📌 Khác" };
@@ -63,15 +68,39 @@ Nhắn tự nhiên, có tên nhà, loại việc và hạn:
   "nhà Sen vòi sen phòng 2 rỉ nước, gọi thợ trước thứ 3"
   "dọn phòng + thay ga nhà Mây mai, gấp"
 
-Lệnh:
+Đặt phòng — nhắn có chữ "đặt" ở đầu:
+  "đặt Gừng cho Anna từ 1/10 đến 1/12, 20tr, cọc 5tr"
+  "đặt nhà Sen 5 đêm từ 10/10 cho anh Nam, airbnb"
+Tôi luôn hiện bản xem trước, bấm nút xác nhận mới ghi vào lịch.
+
+Lệnh việc:
 /viec — mọi việc đang mở
 /viec sen — việc của một nhà
 /xong 12 — đánh dấu việc #12 đã xong
 /xoa 12 — xóa việc #12
-/nha — danh sách nhà & bí danh`;
+/nha — danh sách nhà & bí danh
+
+Lệnh lịch:
+/lich — báo cáo hôm nay (ai đến, ai đi, ai đang ở)
+/dat — booking sắp tới
+/huy 12 — hủy booking #12
+/doi 12 5/10 - 5/11 — đổi ngày booking #12`;
 
 // ---------------- Xử lý webhook ----------------
 Deno.serve(async (req) => {
+  // Lịch tự động (pg_cron) gọi báo cáo sáng. Không có secret Telegram nên chặn spam
+  // bằng cách chỉ gửi 1 lần mỗi 6 giờ, và chỉ gửi về đúng máy của quản trị viên.
+  if (req.headers.get("X-Mo-Cron") === "bao-cao-sang") {
+    const admin = env("ADMIN_CHAT_ID");
+    if (!admin || admin === "0") return new Response("chưa cấu hình ADMIN_CHAT_ID", { status: 200 });
+    const { data: moc } = await db.from("app_settings").select("value").eq("key", "bao_cao_sang_lan_cuoi").maybeSingle();
+    if (moc?.value && Date.now() - Number(moc.value) < 6 * 3600e3) return new Response("đã gửi gần đây");
+    await db.from("app_settings").upsert({ key: "bao_cao_sang_lan_cuoi", value: String(Date.now()) });
+    await guiBaoCao(ctx, Number(admin));
+    await db.rpc("don_nhap_booking_cu");
+    return new Response("ok");
+  }
+
   if (req.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env("TELEGRAM_WEBHOOK_SECRET"))
     return new Response("forbidden", { status: 403 });
   const up = await req.json();
@@ -82,6 +111,12 @@ Deno.serve(async (req) => {
     const cq = up.callback_query;
     const chat = cq.message.chat.id;
     if (String(chat) !== admin) return new Response("ok");
+    // Nút của phần đặt phòng xử lý riêng
+    const ghiChuBooking = await xuLyNutBooking(ctx, cq);
+    if (ghiChuBooking !== null) {
+      await tg("answerCallbackQuery", { callback_query_id: cq.id, text: ghiChuBooking });
+      return new Response("ok");
+    }
     const [kind, a, b] = String(cq.data).split(":");
     let note = "Đã cập nhật";
     if (kind === "c") {
@@ -122,6 +157,18 @@ Deno.serve(async (req) => {
   const arg = args.join(" ");
 
   if (cmd === "/start" || cmd === "/help") await tg("sendMessage", { chat_id: chat, text: HELP });
+  else if (cmd === "/lich") await guiBaoCao(ctx, chat);
+  else if (cmd === "/dat") await lenhDat(ctx, chat);
+  else if (cmd === "/huy") {
+    const id = Number(args[0]);
+    if (!id) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /huy 12" });
+    else await lenhHuy(ctx, chat, id);
+  }
+  else if (cmd === "/doi") {
+    const id = Number(args[0]);
+    if (!id) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /doi 12 5/10 - 5/11" });
+    else await lenhDoiNgay(ctx, chat, id, args.slice(1).join(" "));
+  }
   else if (cmd === "/nha") await tg("sendMessage", { chat_id: chat, text: props!.length
     ? props!.map((p) => `• ${p.name} (${p.code}) — ${(p.aliases ?? []).join(", ") || "chưa có bí danh"}`).join("\n")
     : "Chưa có nhà nào. Thêm trong Supabase > Table Editor > properties." });
@@ -135,6 +182,9 @@ Deno.serve(async (req) => {
       await tg("sendMessage", { chat_id: chat, text: data ? `${cmd === "/xong" ? "✅ Xong" : "🗑 Đã xóa"} #${id}: ${data.title}` : `Không có việc #${id}.` });
     }
   } else if (cmd.startsWith("/")) await tg("sendMessage", { chat_id: chat, text: "Không hiểu lệnh này. Gõ /help." });
+  else if (await xuLyDatPhong(ctx, chat, text)) {
+    // tin nhắn đặt phòng đã được xử lý
+  }
   else {
     const parsed = parseTask(text, props!);
     if (parsed.property || !props!.length) await createTask(chat, parsed.row, parsed.property?.name ?? null);
