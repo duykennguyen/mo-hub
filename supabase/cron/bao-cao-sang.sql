@@ -4,6 +4,7 @@
 --
 -- 1) 08:00 giờ Việt Nam mỗi ngày: Thư kí nhắn báo cáo lịch khách.
 -- 2) 06:00 giờ Việt Nam mỗi ngày: tự chuyển trạng thái booking theo ngày.
+-- 3) 06:10 giờ Việt Nam mỗi ngày: sinh việc cảnh báo hợp đồng / thu tiền / cọc.
 --
 -- LƯU Ý: pg_cron chạy theo giờ UTC. Việt Nam = UTC+7 nên 08:00 VN = 01:00 UTC.
 -- =====================================================================
@@ -16,6 +17,8 @@ select cron.unschedule('thuki-bao-cao-sang')
  where exists (select 1 from cron.job where jobname = 'thuki-bao-cao-sang');
 select cron.unschedule('mo-cap-nhat-trang-thai-booking')
  where exists (select 1 from cron.job where jobname = 'mo-cap-nhat-trang-thai-booking');
+select cron.unschedule('mo-canh-bao-hang-ngay')
+ where exists (select 1 from cron.job where jobname = 'mo-canh-bao-hang-ngay');
 
 -- 1) Báo cáo sáng — gọi Edge Function thuki-bot bằng header riêng.
 --    Hàm tự chặn gửi trùng: tối đa 1 báo cáo mỗi 6 giờ, và chỉ gửi về ADMIN_CHAT_ID.
@@ -32,8 +35,14 @@ select cron.schedule('mo-cap-nhat-trang-thai-booking', '0 23 * * *', $cron$
   select public.cap_nhat_trang_thai_booking();
 $cron$);
 
+-- 3) Cảnh báo hằng ngày: hợp đồng còn 30/15/7 ngày, khoản thu quá hạn, cọc chưa hoàn.
+--    Chạy 06:10 giờ VN, sau bước đổi trạng thái để số liệu đã đúng của ngày mới.
+select cron.schedule('mo-canh-bao-hang-ngay', '10 23 * * *', $cron$
+  select public.tao_canh_bao();
+$cron$);
+
 -- ---------------------------------------------------------------------
--- Kiểm tra: phải thấy 2 dòng, cột active = true
+-- Kiểm tra: phải thấy 3 dòng, cột active = true
 select jobname, schedule, active from cron.job order by jobname;
 
 -- Xem 10 lần chạy gần nhất (sau khi lịch đã chạy ít nhất một lần):
