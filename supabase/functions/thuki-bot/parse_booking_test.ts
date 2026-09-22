@@ -129,3 +129,45 @@ Deno.test("nhận ra kênh Booking.com viết tắt", () => {
   assertEquals(doc("đặt Gừng 1/10 - 5/10 bkk").row.channel, "booking");
   assertEquals(doc("đặt Gừng 1/10 - 5/10 qua page").row.channel, "truc_tiep");
 });
+
+// ---------------- Bảng phân loại: việc hay đặt phòng ----------------
+// Mỗi dòng: [tin nhắn, có phải đặt phòng không]
+const PHAN_LOAI: [string, boolean][] = [
+  // Đặt phòng — dấu hiệu rõ
+  ["khách book củ sả ngày mai , 2 đêm, a Duy", true],
+  ["đặt Gừng cho Anna từ 1/10 đến 1/12", true],
+  ["giữ chỗ Thơm 20/12 đến 27/12", true],
+  ["booking mới: Tía Tô 1/11 - 1/12", true],
+  ["khách thuê nhà Sen 3 tháng từ 1/11", true],
+  // Đặt phòng — dấu hiệu mờ nhưng có mốc thời gian
+  ["Nhà Biển có khách từ 1/11 đến 1/12", true],
+  ["Gừng nhận phòng 5/10, 4 đêm", true],
+  // Giao việc — mở đầu bằng động từ công việc
+  ["dọn Củ Sả trước khi khách check in chiều nay", false],
+  ["sửa máy lạnh Gừng, khách đang ở", false],
+  ["thay ga giường Thơm ngày mai", false],
+  ["kiểm tra hồ bơi nhà Sen hôm nay", false],
+  // Giao việc — có chữ "khách" nhưng là việc
+  ["khách Nhà Sen hỏi thêm khăn tắm", false],
+  ["khách trả phòng Gừng hôm nay, kiểm tra đồ đạc", false],
+  ["đặt cọc thợ sơn 2tr", false],
+  ["thu tiền điện nước nhà Trầu", false],
+];
+
+for (const [cau, laDat] of PHAN_LOAI) {
+  Deno.test(`phân loại (${laDat ? "đặt phòng" : "việc"}): ${cau}`, () => {
+    assertEquals(laLenhDatPhong(cau), laDat);
+  });
+}
+
+Deno.test("tên khách nằm ở cụm cuối sau dấu phẩy", () => {
+  const r = parseBooking("khách book Gừng ngày mai, 2 đêm, a Duy", CAN, HOM_NAY);
+  assertEquals(r.can?.id, "gung");
+  assertEquals(r.tenKhach, "a Duy");
+  assertEquals(r.row.term_type, "ngan_han");
+});
+
+Deno.test("không lấy động từ sau chữ khách làm tên", () => {
+  const r = parseBooking("khách book Gừng từ 1/11 đến 5/11", CAN, HOM_NAY);
+  assertEquals(r.tenKhach, null);      // thà để trống còn hơn ghi tên khách là "book"
+});

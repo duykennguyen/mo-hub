@@ -69,6 +69,11 @@ Nhắn tự nhiên, có tên nhà, loại việc và hạn:
   "nhà Sen vòi sen phòng 2 rỉ nước, gọi thợ trước thứ 3"
   "dọn phòng + thay ga nhà Mây mai, gấp"
 
+Tôi phân biệt hai loại tin nhắn:
+• VIỆC — mở đầu bằng động từ: "dọn Củ Sả mai", "sửa máy lạnh Gừng"
+• ĐẶT PHÒNG — có chữ đặt/book/giữ chỗ, hoặc có chữ "khách" kèm ngày:
+  "khách book Củ Sả ngày mai, 2 đêm, a Duy"
+
 Đặt phòng — nhắn có chữ "đặt" ở đầu:
   "đặt Gừng cho Anna từ 1/10 đến 1/12, 20tr, cọc 5tr"
   "đặt nhà Sen 5 đêm từ 10/10 cho anh Nam, airbnb"
@@ -171,6 +176,13 @@ Deno.serve(async (req) => {
   if (String(chat) !== admin) return new Response("ok"); // bỏ qua người lạ
 
   const props = (await db.from("properties").select("*").eq("active", true).order("sort")).data ?? [];
+  // Tên căn cũng là một cách gọi nhà: nhắn "Củ Sả" thì việc phải vào CamF, không phải nhà khác.
+  // Không có bước này thì bộ đọc việc chỉ biết tên nhà và dễ khớp nhầm sang nhà gần giống.
+  const dsCan = (await db.from("units").select("name,property_id").eq("active", true)).data ?? [];
+  for (const u of dsCan) {
+    const p = props.find((x: any) => x.id === u.property_id);
+    if (p && u.name) p.aliases = [...(p.aliases ?? []), u.name];
+  }
   const [cmd, ...args] = text.split(/\s+/);
   const arg = args.join(" ");
 

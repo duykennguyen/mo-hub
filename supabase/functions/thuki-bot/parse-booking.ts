@@ -31,14 +31,51 @@ export type BanNhap = {
   };
 };
 
-// Tin nhắn này có phải đang nói về đặt phòng không?
-// "đặt cọc thợ" là VIỆC chứ không phải booking → loại trừ rõ ràng.
+// ---------------- Phân loại: đây là đặt phòng hay giao việc? ----------------
+//
+// Luật (xét theo thứ tự, dừng ở luật đầu tiên khớp):
+//   1. Câu mở đầu bằng động từ công việc (dọn, sửa, thay, kiểm tra…) → VIỆC.
+//      "dọn Củ Sả trước khi khách check in" là việc buồng phòng, không phải booking.
+//   2. Có dấu hiệu đặt phòng RÕ (book, booking, đặt phòng, giữ chỗ, khách thuê…) → ĐẶT PHÒNG.
+//   3. Có dấu hiệu MỜ (khách, nhận phòng, check in, trả phòng) + có mốc thời gian
+//      hoặc số đêm/tháng → ĐẶT PHÒNG.
+//   4. Còn lại → VIỆC (mặc định an toàn: việc ghi nhầm thì xóa dễ, booking ghi nhầm thì kẹt lịch).
+
+// Động từ công việc — nếu đứng đầu câu thì chắc chắn là việc
+const DONG_TU_VIEC = /^(dọn|don|lau|giặt|giat|thay|sửa|sua|kiểm tra|kiem tra|gọi|goi|mua|lắp|lap|bảo trì|bao tri|vệ sinh|ve sinh|hút bụi|sơn|son|cắt|cat|tưới|tuoi|đổ|do|bơm|bom|xả|xa|tháo|thao|kê|ke|chuyển|chuyen|nhắc|nhac|hỏi|hoi|liên hệ|lien he)\b/i;
+
+// Dấu hiệu đặt phòng rõ ràng
+const DAU_HIEU_RO = [
+  "đặt phòng", "đặt căn", "book", "booking", "giữ chỗ", "giu cho",
+  "khách thuê", "khach thue", "khách ở", "khach o", "gia hạn cho khách",
+];
+// Dấu hiệu mờ — phải kèm mốc thời gian mới tính là đặt phòng
+const DAU_HIEU_MO = ["khách", "khach", "nhận phòng", "nhan phong", "check in", "checkin", "trả phòng", "tra phong", "guest"];
+
+// Động từ công việc xuất hiện ở BẤT KỲ đâu trong câu — dùng cho luật 3
+const CO_VIEC = /(dọn|lau|giặt|thay ga|thay khăn|sửa|kiểm tra|gọi thợ|lắp|bảo trì|vệ sinh|hút bụi|sơn lại|thu tiền)/i;
+
+const COC_THOI_GIAN = /\d{1,2}\s*[\/-]\s*\d{1,2}|\d{1,3}\s*(đêm|dem|ngày|ngay|tuần|tuan|thá?ng)\b|hôm nay|ngày mai|ngày mốt|ngày kia|cuối tuần|tuần sau/i;
+
 export function laLenhDatPhong(raw: string): boolean {
   const t = raw.toLowerCase().trim();
   if (/^\/(dat|huy|doi)\b/.test(t)) return true;
+
+  // "đặt cọc thợ sơn" là việc, không phải booking
   if (has(t, "đặt cọc") && !has(t, "đặt phòng")) return false;
-  return /^(đặt|dat|book|booking)\b/.test(t)
-    || has(t, "đặt phòng") || has(t, "nhận phòng") || has(t, "khách thuê") || has(t, "check in");
+
+  // 1. Mở đầu bằng động từ công việc → luôn là việc
+  if (DONG_TU_VIEC.test(t)) return false;
+
+  // 2. Dấu hiệu rõ, hoặc câu mở đầu bằng "đặt"
+  if (/^(đặt|dat)\b/.test(t)) return true;
+  if (DAU_HIEU_RO.some((k) => has(t, k))) return true;
+
+  // 3. Dấu hiệu mờ + mốc thời gian, nhưng trong câu không có động từ công việc nào.
+  //    "khách trả phòng Gừng hôm nay, kiểm tra đồ đạc" là việc cần làm, không phải booking mới.
+  if (DAU_HIEU_MO.some((k) => has(t, k)) && COC_THOI_GIAN.test(t) && !CO_VIEC.test(t)) return true;
+
+  return false;
 }
 
 // ---------------- Ngày ----------------
@@ -126,12 +163,17 @@ function timKenh(t: string): string | null {
 // Từ dừng CÓ DẤU — không đưa dạng không dấu vào đây, kẻo "gia đình Lê" bị cắt còn rỗng
 const DUNG = /^(từ|đến|tới|ngày|giá|cọc|thuê|trong|lúc|vào|qua|check)$/i;
 const DUNG_KHONG_DAU = new Set(["tu", "den", "toi", "ngay", "thue", "coc", "check", "airbnb", "booking", "agoda", "bkk", "bnb"]);
-function timTenKhach(raw: string): string | null {
-  const m = raw.match(/\b(?:cho|khách|khach)\s+(.{2,60})/i);
-  if (!m) return null;
+// Sau "khách" thường là động từ chứ không phải tên: "khách book Củ Sả", "khách thuê 3 tháng"
+const SAU_KHACH_KHONG_PHAI_TEN = new Set([
+  "book", "booking", "đặt", "dat", "thuê", "thue", "ở", "o", "nhận", "nhan", "trả", "tra",
+  "check", "checkin", "muốn", "muon", "hỏi", "hoi", "cần", "can", "sẽ", "se", "đã", "da", "mới", "moi",
+]);
+
+function catTen(phan: string): string | null {
   const tu: string[] = [];
-  for (const w of m[1].split(/\s+/)) {
+  for (const w of phan.split(/\s+/)) {
     const sach = w.replace(/[,.;]+$/, "");
+    if (!sach) break;
     if (/\d/.test(sach) || /^[/\-,.]/.test(sach)) break;
     if (DUNG.test(sach)) break;
     // Từ dừng không dấu chỉ áp cho chữ vốn không dấu, để không cắt nhầm tên có dấu
@@ -141,6 +183,36 @@ function timTenKhach(raw: string): string | null {
   }
   const ten = tu.join(" ").trim();
   return ten.length >= 2 ? ten : null;
+}
+
+function timTenKhach(raw: string, tenCan?: string | null): string | null {
+  // 1) Sau chữ "cho" — đáng tin nhất
+  const mCho = raw.match(/\bcho\s+(.{2,60})/i);
+  if (mCho) { const t = catTen(mCho[1]); if (t) return t; }
+
+  // 2) Sau chữ "khách", nhưng bỏ qua nếu ngay sau là động từ ("khách book …")
+  const mKhach = raw.match(/\b(?:khách|khach)\s+(.{2,60})/i);
+  if (mKhach) {
+    const tuDau = mKhach[1].split(/\s+/)[0].replace(/[,.;]+$/, "").toLowerCase();
+    if (!SAU_KHACH_KHONG_PHAI_TEN.has(tuDau)) {
+      const t = catTen(mKhach[1]);
+      if (t) return t;
+    }
+  }
+
+  // 3) Cụm cuối cùng sau dấu phẩy: "… ngày mai, 2 đêm, a Duy"
+  //    Chỉ nhận nếu ngắn, không có số, và không trùng tên căn vừa nhận ra.
+  const manh = raw.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+  if (manh.length >= 2) {
+    const cuoi = manh[manh.length - 1];
+    const soTu = cuoi.split(/\s+/).length;
+    const trungTenCan = tenCan ? noAccent(cuoi).includes(noAccent(tenCan)) : false;
+    if (soTu <= 4 && !/\d/.test(cuoi) && !trungTenCan && !DUNG.test(cuoi.split(/\s+/)[0])) {
+      const t = catTen(cuoi);
+      if (t) return t;
+    }
+  }
+  return null;
 }
 
 // ---------------- Căn ----------------
@@ -210,7 +282,7 @@ export function parseBooking(raw: string, units: Can[], today = vnToday()): BanN
     can,
     canUngVien: ungVien,
     thieu,
-    tenKhach: timTenKhach(raw),
+    tenKhach: timTenKhach(raw, can?.name),
     row: {
       unit_id: can?.id ?? null,
       start_date: batDau,
