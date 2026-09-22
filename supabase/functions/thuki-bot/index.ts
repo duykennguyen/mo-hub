@@ -3,6 +3,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { iso, noAccent, parseTask, vnToday } from "./parse.ts";
 import { guiBaoCao, lenhDat, lenhDoiNgay, lenhHuy, xuLyDatPhong, xuLyNutBooking, type Ctx } from "./booking-bot.ts";
+import { chuanHoaGiongNoi } from "./giong-noi.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
@@ -145,9 +146,26 @@ Deno.serve(async (req) => {
   }
 
   const msg = up.message;
+
+  // Tin nhắn thoại / ghi âm: Thư kí không nghe được (không dùng dịch vụ nhận dạng trả phí).
+  // Trả lời hướng dẫn thay vì im lặng cho người gửi khỏi tưởng bot hỏng.
+  if (msg && (msg.voice || msg.audio || msg.video_note)) {
+    if (String(msg.chat.id) === admin) {
+      await tg("sendMessage", {
+        chat_id: msg.chat.id,
+        text: "🎙 Tôi chưa nghe được tin nhắn thoại.\n\n" +
+          "Cách nhanh nhất: bấm biểu tượng micro trên BÀN PHÍM (không phải nút ghi âm của Telegram) " +
+          "rồi đọc bình thường — chữ hiện ra thì gửi. Tôi hiểu cả cách đọc kiểu " +
+          "\"đặt Gừng cho Anna từ ngày một tháng mười đến ngày một tháng mười hai hai mươi triệu\".",
+      });
+    }
+    return new Response("ok");
+  }
+
   if (!msg?.text) return new Response("ok");
   const chat = msg.chat.id;
-  const text: string = msg.text.trim();
+  // Chuẩn hóa câu đọc bằng giọng nói: số viết bằng chữ, "ngày 1 tháng 10" → 1/10
+  const text: string = chuanHoaGiongNoi(msg.text.trim());
 
   if (text === "/id") { await tg("sendMessage", { chat_id: chat, text: `Chat ID: ${chat}` }); return new Response("ok"); }
   if (String(chat) !== admin) return new Response("ok"); // bỏ qua người lạ
