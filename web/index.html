@@ -63,6 +63,13 @@
     </details>
     </section>
 
+    <section id="secTelegram">
+      <h2>Thư kí Telegram</h2>
+      <p class="muted" id="tgTrangThai">Đang xem…</p>
+      <button class="btn chinh" id="tgKetNoi">Kết nối Telegram</button>
+      <div id="tgMa" class="hide" style="margin-top:12px"></div>
+    </section>
+
     <section id="members" class="hide">
       <h2>Thành viên</h2>
       <p class="muted">Người mới đăng nhập sẽ ở trạng thái chờ. Duyệt ở đây hoặc qua email/Telegram.</p>
@@ -127,6 +134,7 @@ Mo.gate(async (me) => {
   }
 
   loadLinks(me);
+  loadTelegram();
   if (me.isAdmin) {
     $("#addLink").classList.remove("hide"); $("#members").classList.remove("hide");
     $("#oNha").classList.remove("hide");
@@ -143,6 +151,33 @@ Mo.gate(async (me) => {
     toast("Đã lưu link"); loadLinks(me);
   };
 });
+
+// ---------- Thư kí Telegram ----------
+// Mỗi người tự liên kết Telegram của mình bằng mã dùng một lần (hạn 10 phút).
+// Sau khi liên kết, bot làm đúng theo quyền của tài khoản này (RLS trong database).
+const BOT_TELEGRAM = "ThuKiMo_bot";
+
+async function loadTelegram() {
+  const { data: n, error } = await sb.rpc("lien_ket_telegram_cua_toi");
+  $("#tgTrangThai").textContent = error ? "Chưa xem được trạng thái kết nối."
+    : n ? `Đã kết nối. Nhắn @${BOT_TELEGRAM} để ghi việc; bot làm đúng theo quyền của bạn.`
+    : "Chưa kết nối. Kết nối để ghi việc và xem lịch bằng tin nhắn Telegram.";
+  $("#tgKetNoi").textContent = n ? "Kết nối lại / đổi tài khoản Telegram" : "Kết nối Telegram";
+  $("#tgKetNoi").onclick = async () => {
+    const { data: ma, error: e } = await sb.rpc("tao_ma_lien_ket_telegram");
+    if (e) return toast("Lỗi: " + e.message);
+    $("#tgMa").innerHTML = `
+      <p>Mã của bạn: <b style="font-size:1.4em;letter-spacing:2px">${esc(ma)}</b><br>
+      <span class="muted">Dùng một lần, hết hạn sau 10 phút.</span></p>
+      <div class="hanh-dong">
+        <a class="btn chinh" href="https://t.me/${BOT_TELEGRAM}?start=${encodeURIComponent(ma)}" target="_blank" rel="noopener">Mở Telegram</a>
+        <button class="btn" id="tgChep">Chép lệnh</button>
+      </div>
+      <p class="muted">Mở Telegram rồi bấm “Start”, hoặc tự nhắn cho @${BOT_TELEGRAM}: /lienket ${esc(ma)}</p>`;
+    $("#tgMa").classList.remove("hide");
+    $("#tgChep").onclick = () => copy("/lienket " + ma);
+  };
+}
 
 // ---------- Cần xử lý hôm nay ----------
 // Việc thì ai cũng thấy (RLS đã lọc sẵn). Phần khách và tiền chỉ gọi khi người này
@@ -226,11 +261,20 @@ async function loadLinks(me) {
 }
 
 async function loadMembers() {
-  const { data } = await sb.from("profiles").select("*").order("status").order("created_at", { ascending: false });
+  const [{ data }, { data: lk }] = await Promise.all([
+    sb.from("profiles").select("*").order("status").order("created_at", { ascending: false }),
+    sb.rpc("ds_lien_ket_telegram"),
+  ]);
+  // Ai đã liên kết Telegram: hồ sơ → danh sách chat id
+  const tele = {};
+  for (const l of lk ?? []) (tele[l.profile_id] ??= []).push(l.chat_id);
+  const nutTele = (p) => (tele[p.id] ?? []).map((c) =>
+    `<button class="btn chu" data-ngat="${esc(String(c))}" title="Chat ${esc(String(c))}">Ngắt Telegram</button>`).join("");
   const st = { pending: "Chờ duyệt", approved: "Đã duyệt", rejected: "Từ chối" };
   $("#memList").innerHTML = (data ?? []).map((p) => `
     <div class="link-hang">
       <div class="ten">${esc(p.full_name || "(chưa ghi tên)")}<small>${esc(p.email)} · ${st[p.status]}</small></div>
+      ${nutTele(p)}
       ${p.role === "admin" ? `<span class="muted">Quản trị</span>` : `
       <select data-role="${p.id}" style="width:auto">
         ${[["staff", "Nhân viên"], ["manager", "Quản lý"], ["viewer", "Chỉ xem"]].map(([v, n]) => `<option value="${v}" ${p.role === v ? "selected" : ""}>${n}</option>`).join("")}
@@ -244,6 +288,11 @@ async function loadMembers() {
   };
   $("#memList").onclick = async (e) => {
     if (e.target.dataset.quyen) return openQuyen((data ?? []).find((p) => p.id === e.target.dataset.quyen));
+    if (e.target.dataset.ngat) {
+      if (!confirm("Ngắt liên kết Telegram này? Chat đó sẽ không ra lệnh cho Thư kí được nữa.")) return;
+      const { error } = await sb.rpc("thu_hoi_lien_ket_telegram", { p_chat: Number(e.target.dataset.ngat) });
+      toast(error ? "Lỗi: " + error.message : "Đã ngắt liên kết Telegram"); return loadMembers();
+    }
     const id = e.target.dataset.ok || e.target.dataset.no;
     if (!id) return;
     const role = $(`select[data-role="${id}"]`).value;
