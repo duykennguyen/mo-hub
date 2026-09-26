@@ -20,12 +20,18 @@ select cron.unschedule('mo-cap-nhat-trang-thai-booking')
 select cron.unschedule('mo-canh-bao-hang-ngay')
  where exists (select 1 from cron.job where jobname = 'mo-canh-bao-hang-ngay');
 
--- 1) Báo cáo sáng — gọi Edge Function thuki-bot bằng header riêng.
---    Hàm tự chặn gửi trùng: tối đa 1 báo cáo mỗi 6 giờ, và chỉ gửi về ADMIN_CHAT_ID.
+-- 1) Báo cáo sáng — gọi Edge Function thuki-bot bằng header riêng + secret đọc từ Vault.
+--    Secret gốc là Edge Function Secret CRON_SECRET; bot tự chép sang Vault (tên mo_cron_secret),
+--    xem migration 20260926000002_cron_secret.sql. Sai/thiếu secret → bot trả 403.
+--    Lớp thứ hai: tối đa 1 báo cáo mỗi 6 giờ, và chỉ gửi về ADMIN_CHAT_ID.
 select cron.schedule('thuki-bao-cao-sang', '0 1 * * *', $cron$
   select net.http_post(
     url     := 'https://ggxgwbfrmndqslgprcpt.supabase.co/functions/v1/thuki-bot',
-    headers := '{"Content-Type":"application/json","X-Mo-Cron":"bao-cao-sang"}'::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'X-Mo-Cron', 'bao-cao-sang',
+      'X-Mo-Cron-Secret', coalesce((select decrypted_secret from vault.decrypted_secrets where name = 'mo_cron_secret'), '')
+    ),
     body    := '{}'::jsonb
   );
 $cron$);
