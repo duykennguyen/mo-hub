@@ -267,7 +267,8 @@ begin
 end $$;
 
 -- =====================================================================
--- THƯ KÍ (service role, không có auth.uid()): được xóa, nhật ký ghi "Thư kí (Telegram)"
+-- MÁY CHỦ (service role, không có auth.uid()): được xóa, nhật ký ghi "Hệ thống".
+-- Từ 26/09/2026 Thư kí không dùng service role để ghi nữa (xem thu_ki_theo_nguoi_test.sql).
 -- =====================================================================
 reset role;
 set local role service_role;
@@ -276,8 +277,8 @@ select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 do $$ begin
   update tasks set deleted_at = now() where title = 'Việc test B';
   if (select actor from task_log where task_id = (select id from tasks where title = 'Việc test B')
-      and action = 'xoa') is distinct from 'Thư kí (Telegram)' then
-    raise exception 'FAIL 11a: thao tác từ Thư kí ghi sai tên trong nhật ký'; end if;
+      and action = 'xoa') is distinct from 'Hệ thống' then
+    raise exception 'FAIL 11a: thao tác của máy chủ ghi sai tên trong nhật ký'; end if;
 end $$;
 
 reset role;

@@ -20,6 +20,16 @@ const tien = (n: number | null | undefined) => (n ? Number(n).toLocaleString("vi
 const dm = (s: string | null | undefined) => (s ? `${s.slice(8)}/${s.slice(5, 7)}` : "—");
 const soDem = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400e3);
 
+// Chặn sớm cho dễ hiểu; chặn thật vẫn là RLS (can_book) trong database.
+const KHONG_QUYEN_DAT = "🚫 Tài khoản của bạn không có quyền đặt phòng hay xem booking qua Thư kí.\n" +
+  "Chỉ quản trị viên và quản lý làm được việc này.";
+async function coQuyenDatPhong(ctx: Ctx, chat: number): Promise<boolean> {
+  const { data } = await ctx.db.rpc("can_book");
+  if (data === true) return true;
+  await ctx.tg("sendMessage", { chat_id: chat, text: KHONG_QUYEN_DAT });
+  return false;
+}
+
 // ---------------- Lấy danh sách căn kèm tên nhà ----------------
 export async function layCan(db: any): Promise<Can[]> {
   const { data } = await db.from("units")
@@ -94,6 +104,7 @@ async function ghiBooking(ctx: Ctx, chat: number, nhap: BanNhap) {
 export async function xuLyDatPhong(ctx: Ctx, chat: number, text: string): Promise<boolean> {
   const { db, tg } = ctx;
   if (!laLenhDatPhong(text)) return false;
+  if (!(await coQuyenDatPhong(ctx, chat))) return true;   // là tin đặt phòng nhưng không có quyền → dừng ở đây
 
   const cans = await layCan(db);
   if (!cans.length) {
@@ -196,6 +207,7 @@ export async function xuLyNutBooking(ctx: Ctx, cq: any): Promise<string | null> 
 // /dat — sắp tới có ai
 export async function lenhDat(ctx: Ctx, chat: number) {
   const { db, tg, LICH } = ctx;
+  if (!(await coQuyenDatPhong(ctx, chat))) return;
   const homNay = vnToday().toISOString().slice(0, 10);
   const { data } = await db.from("bookings")
     .select("id,start_date,end_date,status,units(name),guests(full_name)")
@@ -214,6 +226,7 @@ export async function lenhDat(ctx: Ctx, chat: number) {
 // /huy 12 — hỏi lại rồi mới hủy
 export async function lenhHuy(ctx: Ctx, chat: number, id: number) {
   const { db, tg } = ctx;
+  if (!(await coQuyenDatPhong(ctx, chat))) return;
   const { data: b } = await db.from("bookings")
     .select("id,start_date,end_date,status,units(name),guests(full_name)")
     .eq("id", id).is("deleted_at", null).maybeSingle();
@@ -232,12 +245,14 @@ export async function lenhHuy(ctx: Ctx, chat: number, id: number) {
 // /doi 12 5/10 - 5/11 — đổi ngày
 export async function lenhDoiNgay(ctx: Ctx, chat: number, id: number, phanCon: string) {
   const { db, tg } = ctx;
+  if (!(await coQuyenDatPhong(ctx, chat))) return;
   const ngay = timNgay(phanCon);
   if (ngay.length < 2) {
     return tg("sendMessage", { chat_id: chat, text: `Cú pháp: /doi ${id || 12} 5/10 - 5/11` });
   }
-  const { error } = await db.from("bookings")
-    .update({ start_date: ngay[0], end_date: ngay[1] }).eq("id", id).is("deleted_at", null);
+  const { data: doi, error } = await db.from("bookings")
+    .update({ start_date: ngay[0], end_date: ngay[1] }).eq("id", id).is("deleted_at", null).select("id");
+  if (!error && !doi?.length) return tg("sendMessage", { chat_id: chat, text: `Không có booking #${id}.` });
   if (error) {
     return tg("sendMessage", {
       chat_id: chat,
@@ -252,6 +267,7 @@ export async function lenhDoiNgay(ctx: Ctx, chat: number, id: number, phanCon: s
 // ---------------- Báo cáo sáng ----------------
 export async function soanBaoCao(db: any, LICH: string): Promise<string> {
   const { data: bc, error } = await db.rpc("bao_cao_ngay");
+  if (error && /quyền/.test(error.message ?? "")) return "🚫 Tài khoản của bạn không có quyền xem lịch đặt phòng.";
   if (error || !bc) return "Không lấy được số liệu lịch: " + (error?.message ?? "rỗng");
 
   const d = new Date(bc.ngay + "T00:00:00Z");
