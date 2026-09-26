@@ -10,3 +10,8 @@ supabase/seed.local.sql
 node_modules/
 .DS_Store
 Thumbs.db
+
+# Tài liệu vận hành nằm ở repo private mo-hub-private (đặt cạnh repo này).
+# CLAUDE.md ở đây là bản cục bộ chỉ gồm dòng: @../mo-hub-private/CLAUDE.md
+/CLAUDE.md
+/docs/
