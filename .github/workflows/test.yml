@@ -1,0 +1,49 @@
+# Tự chạy toàn bộ test mỗi lần đẩy code (Blueprint chặng 0, điểm 5). Miễn phí với repo public.
+#   · deno: 84+ test bộ đọc tin nhắn và cổng danh tính của Thư kí
+#   · sql : dựng Postgres 17 trống + lớp giả lập Supabase, chạy mọi migration rồi mọi bài test RLS
+name: Kiểm thử
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deno:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/thuki-bot/index.ts
+      - run: deno test supabase/functions/thuki-bot/
+
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mohub_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: mohub_test
+    steps:
+      - uses: actions/checkout@v5
+      - name: Lớp giả lập Supabase
+        run: psql -q -v ON_ERROR_STOP=1 -f supabase/tests/_gia_lap_supabase.sql
+      - name: Chạy mọi migration theo thứ tự
+        run: for f in supabase/migrations/*.sql; do echo "== $f"; psql -q -v ON_ERROR_STOP=1 -f "$f" > /dev/null; done
+      - name: Chạy mọi bài test SQL
+        run: for f in supabase/tests/*_test.sql; do echo "== $f"; psql -q -v ON_ERROR_STOP=1 -A -t -f "$f"; done
