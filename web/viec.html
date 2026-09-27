@@ -54,6 +54,7 @@
       <div><label>Hạn</label><input id="vDue" type="date"></div>
     </div>
     <label>Chi tiết</label><textarea id="vDetail"></textarea>
+    <label>Xong khi (không bắt buộc)</label><input id="vDauRa" placeholder="Ví dụ: đã thay vòi mới, gửi ảnh vào nhóm">
   </div>
   <div class="chan"><button class="btn" data-close>Hủy</button><button class="btn chinh" id="vSave">Lưu việc</button></div>
 </dialog>
@@ -70,7 +71,7 @@
 const { sb, esc, $, toast, vnToday, ddmm, when } = Mo;
 const LOAI = { ky_thuat: "Kỹ thuật", buong_phong: "Buồng phòng", quan_ly: "Quản lý", khac: "Khác" };
 const MUC = { cao: "Gấp", thuong: "Bình thường", thap: "Không gấp" };
-const TRUONG = { title: "Việc", detail: "Chi tiết", location: "Phòng", category: "Loại", priority: "Mức độ", assignee: "Người làm",
+const TRUONG = { title: "Việc", detail: "Chi tiết", dau_ra: "Xong khi", muc_duyet: "Mức duyệt", location: "Phòng", category: "Loại", priority: "Mức độ", assignee: "Người làm",
   due_date: "Hạn", status: "Trạng thái", property_id: "Nhà", deleted_at: "Xóa" };
 const HANH_DONG = { tao: "tạo việc", sua: "sửa", xong: "đánh dấu xong", mo_lai: "mở lại", xoa: "xóa", khoi_phuc: "khôi phục" };
 
@@ -161,7 +162,8 @@ function taskRow(t) {
   return `<div class="viec ${t.status === "done" ? "xong" : ""}">
     <span class="cham ${t.priority}" title="${MUC[t.priority]}"></span>
     <div><div class="tieu-de">${esc(t.title)}</div><div class="meta">${meta}</div>
-      ${t.detail ? `<div class="chi-tiet">${esc(t.detail)}</div>` : ""}</div>
+      ${t.detail ? `<div class="chi-tiet">${esc(t.detail)}</div>` : ""}
+      ${t.dau_ra ? `<div class="chi-tiet"><b>Xong khi:</b> ${esc(t.dau_ra)}</div>` : ""}</div>
     <div class="nut">${btns}</div></div>`;
 }
 
@@ -192,6 +194,7 @@ function openForm(t) {
   $("#vWho").value = t?.assignee_id ?? "";
   $("#vDue").value = t?.due_date ?? "";
   $("#vDetail").value = t?.detail ?? "";
+  $("#vDauRa").value = t?.dau_ra ?? "";
   $("#dlgViec").showModal(); $("#vTitle").focus();
 }
 
@@ -202,12 +205,14 @@ async function save() {
     assignee_id: $("#vWho").value || null,
     assignee: $("#vWho").value ? $("#vWho").selectedOptions[0].textContent : null,
     due_date: $("#vDue").value || null, detail: $("#vDetail").value.trim() || null,
+    dau_ra: $("#vDauRa").value.trim() || null,
   };
   if (!row.title) return toast("Ghi việc cần làm trước khi lưu");
   $("#vSave").disabled = true;
   const { error } = editing ? await sb.from("tasks").update(row).eq("id", editing.id) : await sb.from("tasks").insert(row);
   $("#vSave").disabled = false;
-  if (error) return toast("Lỗi: " + error.message);
+  if (error) return toast(error.message.includes("tasks_agent_phai_co_dau_ra")
+    ? "Việc do hệ thống tự sinh phải có ô “Xong khi”, đừng để trống" : "Lỗi: " + error.message);
   $("#dlgViec").close(); toast(editing ? "Đã lưu thay đổi" : "Đã thêm việc"); load();
 }
 
