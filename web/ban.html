@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Tài sản bán — Mô Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css?v=2">
+</head>
+<body>
+<div id="gate" class="hide"></div>
+<div id="app" class="hide">
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="index.html"><b>Mô Hub</b><span>Tài sản bán</span></a>
+      <div class="who" id="who"></div>
+    </header>
+    <div id="chanQuyen" class="hide"><p class="trong">Chỉ quản trị viên quản lý hồ sơ chuyển nhượng.</p></div>
+    <div id="noiDung" class="hide">
+      <div class="cong-cu">
+        <label class="btn chinh" for="fNhap">Nhập hồ sơ từ file</label>
+        <input id="fNhap" type="file" accept=".json,application/json" class="hide">
+        <a class="btn" id="linkSite" target="_blank" rel="noopener">Mở trang bán</a>
+        <a class="btn" href="index.html">← Về Hub</a>
+      </div>
+      <p class="muted">Agent Hồ sơ chấm độ đủ từng hồ sơ và <b>chặn xuất bản</b> khi thiếu giá chào, pháp lý, điểm cần lưu ý hoặc chưa xác nhận mandate bán
+        (Quy chuẩn Profile BĐS Mô House). Pháp lý chi tiết (số sổ, số thửa) chỉ admin thấy, không bao giờ lên trang công khai.</p>
+      <div id="ketQuaNhap"></div>
+      <div id="ds"><p class="muted">Đang tải…</p></div>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlgPL">
+  <div class="dau"><h3 id="plTen">Pháp lý & lưu ý</h3><button class="btn chu" data-close>Đóng</button></div>
+  <div class="than">
+    <p class="muted"><b>Phần công khai</b> — hiện trên trang bán.</p>
+    <label>Hình thức</label><input id="plHinhThuc" placeholder="Sổ đỏ (Giấy CN QSD đất & tài sản gắn liền với đất)">
+    <label>Loại đất (không bắt buộc)</label><input id="plLoaiDat" placeholder="Đất ở tại đô thị (ODT) · lâu dài">
+    <label>Tình trạng</label><input id="plTinhTrang" placeholder="Pháp lý đầy đủ / đang hoàn công…">
+    <label>Điểm cần lưu ý — mỗi dòng một ý (quy hoạch, ngập, khoảng lùi, bảo tồn…)</label>
+    <textarea id="plLuuY" rows="4"></textarea>
+    <p class="muted" style="margin-top:16px"><b>Phần nội bộ</b> — chỉ admin thấy.</p>
+    <label>Pháp lý chi tiết (số GCN, thửa, tờ bản đồ, cơ quan cấp…)</label>
+    <textarea id="plChiTiet" rows="4"></textarea>
+    <label class="chon"><input type="checkbox" id="plMandate"> Đã có mandate bán từ chủ đầu tư cho đúng tài sản này</label>
+    <label>Ghi chú mandate (ai xác nhận, ngày nào)</label><input id="plMandateNote">
+  </div>
+  <div class="chan"><button class="btn" data-close>Hủy</button><button class="btn chinh" id="plLuu">Lưu</button></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js?v=3"></script>
+<script src="assets/app.js?v=2"></script>
+<script>
+const { sb, C, esc, $, toast } = Mo;
+const SITE = C.SALE_SITE_URL || "https://duykennguyen.github.io/mo-house-ban/";
+let hoSo = [], dangSua = null;
+
+Mo.gate(async (me) => {
+  if (!me.isAdmin) return $("#chanQuyen").classList.remove("hide");
+  $("#noiDung").classList.remove("hide");
+  $("#linkSite").href = SITE;
+  document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
+  $("#fNhap").onchange = nhapFile;
+  $("#plLuu").onclick = luuPhapLy;
+  taiLai();
+});
+
+async function taiLai() {
+  const [{ data: diem, error }, { data: ds }] = await Promise.all([
+    sb.rpc("ho_so_ban_diem"),
+    sb.from("sale_listings").select("id,property_id,slug,title,asking_price,is_published,legal_public,risks").order("sort"),
+  ]);
+  if (error) return ($("#ds").innerHTML = `<p class="trong">Lỗi: ${esc(error.message)}</p>`);
+  hoSo = ds ?? [];
+  if (!hoSo.length) return ($("#ds").innerHTML = `<p class="trong">Chưa có hồ sơ nào. Bấm “Nhập hồ sơ từ file”.</p>`);
+  const d = Object.fromEntries((diem ?? []).map((x) => [x.slug, x]));
+  $("#ds").innerHTML = hoSo.map((s) => {
+    const x = d[s.slug] || { diem: 0, thieu: [] };
+    return `<div class="link-hang">
+      <div class="ten">${esc(s.title)} · <b>${x.diem}%</b>
+        <small>${s.is_published ? "Đang hiện trên trang bán" : "Nháp — chưa hiện"}${x.thieu?.length ? " · còn thiếu: " + esc(x.thieu.join(", ")) : " · hồ sơ đủ"}</small></div>
+      ${s.is_published ? `<a class="btn nho" href="${esc(SITE)}tai-san.html?ma=${encodeURIComponent(s.slug)}" target="_blank" rel="noopener">Xem</a>` : ""}
+      <button class="btn nho" data-pl="${s.id}">Pháp lý & lưu ý</button>
+      <button class="btn nho ${s.is_published ? "" : "reu"}" data-xb="${s.id}">${s.is_published ? "Ẩn khỏi trang" : "Xuất bản"}</button>
+    </div>`;
+  }).join("");
+  $("#ds").onclick = (e) => {
+    const t = e.target.dataset;
+    if (t.xb) doiXuatBan(hoSo.find((s) => s.id === t.xb));
+    if (t.pl) moPhapLy(hoSo.find((s) => s.id === t.pl));
+  };
+}
+
+async function doiXuatBan(s) {
+  const { error } = await sb.from("sale_listings").update({ is_published: !s.is_published }).eq("id", s.id);
+  // Agent Hồ sơ chặn ở database: báo nguyên văn còn thiếu gì
+  if (error) return toast(error.message);
+  toast(s.is_published ? "Đã ẩn khỏi trang bán" : "Đã xuất bản"); taiLai();
+}
+
+async function moPhapLy(s) {
+  dangSua = s;
+  $("#plTen").textContent = "Pháp lý & lưu ý — " + s.title;
+  const lp = s.legal_public || {};
+  $("#plHinhThuc").value = lp.hinh_thuc ?? ""; $("#plLoaiDat").value = lp.loai_dat ?? ""; $("#plTinhTrang").value = lp.tinh_trang ?? "";
+  $("#plLuuY").value = (s.risks ?? []).join("\n");
+  const { data: pp } = await sb.from("property_private").select("*").eq("property_id", s.property_id).maybeSingle();
+  $("#plChiTiet").value = pp?.legal_detail ?? ""; $("#plMandate").checked = !!pp?.sale_mandate_confirmed; $("#plMandateNote").value = pp?.mandate_note ?? "";
+  $("#dlgPL").showModal();
+}
+
+async function luuPhapLy() {
+  const s = dangSua; if (!s) return;
+  const lp = { ...(s.legal_public || {}), hinh_thuc: $("#plHinhThuc").value.trim(), loai_dat: $("#plLoaiDat").value.trim(), tinh_trang: $("#plTinhTrang").value.trim() };
+  const risks = $("#plLuuY").value.split("\n").map((x) => x.trim()).filter(Boolean);
+  const { error: e1 } = await sb.from("property_private").upsert({
+    property_id: s.property_id, legal_detail: $("#plChiTiet").value.trim() || null,
+    sale_mandate_confirmed: $("#plMandate").checked, mandate_note: $("#plMandateNote").value.trim() || null });
+  if (e1) return toast("Lỗi lưu pháp lý nội bộ: " + e1.message);
+  const { error: e2 } = await sb.from("sale_listings").update({ legal_public: lp, risks }).eq("id", s.id);
+  if (e2) return toast(e2.message);   // hồ sơ đang xuất bản mà bị xóa pháp lý → agent Hồ sơ chặn
+  $("#dlgPL").close(); toast("Đã lưu"); taiLai();
+}
+
+async function nhapFile() {
+  const f = $("#fNhap").files[0]; if (!f) return;
+  let p;
+  try { p = JSON.parse(await f.text()); } catch { return toast("File không phải JSON hợp lệ"); }
+  if (!Array.isArray(p.tai_san)) return toast("File thiếu danh sách tai_san");
+  if (!confirm(`Nạp ${p.tai_san.length} hồ sơ từ "${f.name}"? Hồ sơ trùng mã sẽ được cập nhật.`)) return;
+  const { data, error } = await sb.rpc("nhap_tai_san_ban", { p });
+  $("#fNhap").value = "";
+  if (error) return toast("Lỗi nạp: " + error.message);
+  $("#ketQuaNhap").innerHTML = `<div class="o" style="margin:12px 0"><h3>Kết quả nạp</h3>${data.map((r) =>
+    `<p>${r.xuat_ban ? "✅" : "⏸"} <b>${esc(r.slug)}</b> — ${r.xuat_ban ? "đã xuất bản" : esc(r.ly_do || "để nháp")}</p>`).join("")}</div>`;
+  taiLai();
+}
+</script>
+</body>
+</html>

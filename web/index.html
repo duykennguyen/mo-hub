@@ -46,6 +46,11 @@
         <p class="muted">Tên nhà và các căn, giá niêm yết, bí danh cho Thư kí, bật/tắt xuất bản ra trang khách.</p>
         <div class="hanh-dong"><a class="btn" href="nha.html">Mở quản lý nhà</a></div>
       </div>
+      <div class="o hide" id="oBan">
+        <h3><a href="ban.html">Tài sản bán</a></h3>
+        <p class="muted">Hồ sơ chuyển nhượng: % hồ sơ, pháp lý, mandate, bật/tắt xuất bản trang bán.</p>
+        <div class="hanh-dong"><a class="btn" href="ban.html">Mở tài sản bán</a></div>
+      </div>
     </div>
 
     <section id="secLinks">
@@ -95,7 +100,7 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js?v=2"></script>
+<script src="config.js?v=3"></script>
 <script src="assets/app.js?v=2"></script>
 <script>
 const { sb, C, esc, $, toast, copy, vnToday, ddmm } = Mo;
@@ -138,6 +143,7 @@ Mo.gate(async (me) => {
   if (me.isAdmin) {
     $("#addLink").classList.remove("hide"); $("#members").classList.remove("hide");
     $("#oNha").classList.remove("hide");
+    $("#oBan").classList.remove("hide");
     loadMembers();
   }
   document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
