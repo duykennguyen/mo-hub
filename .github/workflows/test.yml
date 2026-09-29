@@ -1,5 +1,5 @@
 # Tự chạy toàn bộ test mỗi lần đẩy code (Blueprint chặng 0, điểm 5). Miễn phí với repo public.
-#   · deno: 84+ test bộ đọc tin nhắn và cổng danh tính của Thư kí
+#   · deno: test Thư kí (bộ đọc tin nhắn, cổng danh tính) + test bot Content
 #   · sql : dựng Postgres 17 trống + lớp giả lập Supabase, chạy mọi migration rồi mọi bài test RLS
 name: Kiểm thử
 
@@ -20,8 +20,8 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno check supabase/functions/thuki-bot/index.ts
-      - run: deno test supabase/functions/thuki-bot/
+      - run: deno check supabase/functions/thuki-bot/index.ts supabase/functions/content-house-bot/index.ts supabase/functions/content-bedding-bot/index.ts supabase/functions/content-api/index.ts supabase/functions/content-fallback/index.ts
+      - run: deno test supabase/functions/
 
   sql:
     runs-on: ubuntu-latest

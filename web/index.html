@@ -46,6 +46,11 @@
         <p class="muted">Tên nhà và các căn, giá niêm yết, bí danh cho Thư kí, bật/tắt xuất bản ra trang khách.</p>
         <div class="hanh-dong"><a class="btn" href="nha.html">Mở quản lý nhà</a></div>
       </div>
+      <div class="o hide" id="oContent">
+        <h3><a href="content.html">Kho Content</a></h3>
+        <p class="muted">Bài nháp Mô House (08:00) và Mô Bedding (20:00), hàng đợi chủ đề, bài đã duyệt và đã đăng.</p>
+        <div class="hanh-dong"><a class="btn" href="content.html">Mở Kho Content</a></div>
+      </div>
       <div class="o hide" id="oBan">
         <h3><a href="ban.html">Tài sản bán</a></h3>
         <p class="muted">Hồ sơ chuyển nhượng: % hồ sơ, pháp lý, mandate, bật/tắt xuất bản trang bán.</p>
@@ -131,6 +136,9 @@ Mo.gate(async (me) => {
     if (me.can_see_share_links === false) $("#secLinks").classList.add("hide");
     if (me.can_see_booking === false || !["manager", "viewer"].includes(me.role)) $("#oDatPhong").classList.add("hide");
   }
+
+  // Kho Content: admin và quản lý (chặn thật ở RLS)
+  if (["admin", "manager"].includes(me.role)) $("#oContent").classList.remove("hide");
 
   // Lịch đặt phòng nằm ở site riêng; địa chỉ khai trong config.js để sau này đổi một chỗ
   if (C.CALENDAR_URL) {

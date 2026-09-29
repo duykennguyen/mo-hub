@@ -60,6 +60,7 @@ export type MoPhienDeps = {
   may: any;
   xacThucMa: (tokenHash: string) => Promise<{ access_token: string } | null>;
   taoClient: (headers: Record<string, string>) => any;
+  kenh?: string;   // header x-mo-kenh → nhãn nhật ký "(qua …)"; mặc định Thư kí
 };
 export type Phien = { db: any; nguoi: Nguoi; dong: () => Promise<void> };
 
@@ -78,7 +79,7 @@ export async function moPhien(deps: MoPhienDeps, nguoi: Nguoi): Promise<Phien> {
   const phien = await deps.xacThucMa(hash);
   if (!phien?.access_token) throw new Error("Không đổi được mã lấy phiên đăng nhập");
 
-  const db = deps.taoClient({ Authorization: `Bearer ${phien.access_token}`, "x-mo-kenh": "thu-ki" });
+  const db = deps.taoClient({ Authorization: `Bearer ${phien.access_token}`, "x-mo-kenh": deps.kenh ?? "thu-ki" });
   return {
     db, nguoi,
     // Xong tin nhắn thì hủy phiên, không để phiên thừa sống tiếp

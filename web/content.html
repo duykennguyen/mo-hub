@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Kho Content — Mô Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css?v=2">
+<style>
+  .tab-hang { display: flex; gap: 8px; margin: 8px 0 16px; flex-wrap: wrap; }
+  .tab-hang .btn[aria-pressed="true"] { background: var(--nau-dam); color: var(--giay); border-color: var(--nau-dam); }
+  .bai { background: var(--giay); border: 1px solid var(--vien); padding: 14px; margin-bottom: 12px; }
+  .bai pre { white-space: pre-wrap; font-family: inherit; margin: 10px 0; max-height: 260px; overflow: auto; background: var(--nen); padding: 10px; }
+  .bai .meta { font-size: 13px; color: var(--tro); }
+  .nhan-tt { display: inline-block; font-size: 12px; padding: 2px 8px; border: 1px solid var(--vien); margin-right: 6px; }
+  .du-phong { color: var(--canh-bao); border-color: var(--canh-bao); }
+  .loc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  @media (max-width: 560px) { .loc { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div id="gate" class="hide"></div>
+<div id="app" class="hide">
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="index.html"><b>Mô Hub</b><span>Kho Content</span></a>
+      <div class="who" id="who"></div>
+    </header>
+    <div id="chanQuyen" class="hide"><p class="trong">Kho Content chỉ dành cho quản trị viên và quản lý.</p></div>
+    <div id="noiDung" class="hide">
+      <div class="tab-hang" role="tablist">
+        <button class="btn" data-brand="house" aria-pressed="true">Mô House</button>
+        <button class="btn" data-brand="bedding" aria-pressed="false">Mô Bedding</button>
+        <a class="btn" href="index.html">← Về Hub</a>
+      </div>
+      <p class="muted">Bài do bot viết mỗi ngày (08:00 Mô House, 20:00 Mô Bedding) là <b>bản nháp</b>: duyệt trên Telegram, đăng tay lên mạng xã hội, rồi bấm “Đã đăng” và dán link. Hệ thống không tự đăng.</p>
+
+      <section>
+        <h2>Hàng đợi chủ đề</h2>
+        <div id="themChuDe" class="hide">
+          <label>Chủ đề</label><input id="cdTopic" placeholder="Ví dụ: Buổi sáng ở hồ bơi Nhà Biển An Bàng">
+          <div class="hang">
+            <div><label>Định dạng (trống = mặc định)</label><input id="cdFormat" placeholder="caption IG / mô tả listing / blog…"></div>
+            <div><label>Ưu tiên (số lớn viết trước)</label><input id="cdPrio" type="number" value="0"></div>
+          </div>
+          <label>Ghi chú cho người viết</label><input id="cdNotes">
+          <button class="btn chinh" id="cdLuu" style="margin-top:10px">Thêm chủ đề</button>
+        </div>
+        <div id="hangDoi"><p class="muted">Đang tải…</p></div>
+      </section>
+
+      <section>
+        <h2>Bài viết</h2>
+        <div class="loc">
+          <select id="locTT">
+            <option value="">Mọi trạng thái (trừ đã hủy)</option>
+            <option value="cho_duyet">Chờ duyệt</option><option value="can_viet_lai">Cần viết lại</option>
+            <option value="da_duyet">Đã duyệt</option><option value="da_dang">Đã đăng</option>
+            <option value="dang_viet">Đang viết</option><option value="cho_viet">Chờ viết</option><option value="huy">Đã hủy</option>
+          </select>
+          <input id="locTim" type="search" placeholder="Tìm theo chủ đề…">
+        </div>
+        <div id="dsBai" style="margin-top:12px"><p class="muted">Đang tải…</p></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlgBan">
+  <div class="dau"><h3 id="banTieuDe">Các phiên bản</h3><button class="btn chu" data-close>Đóng</button></div>
+  <div class="than" id="banNoiDung"></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js?v=3"></script>
+<script src="assets/app.js?v=2"></script>
+<script>
+const { sb, esc, $, toast, copy } = Mo;
+const TT = { cho_viet: "Chờ viết", dang_viet: "Đang viết", cho_duyet: "Chờ duyệt", can_viet_lai: "Cần viết lại", da_duyet: "Đã duyệt", da_dang: "Đã đăng", huy: "Đã hủy" };
+let brand = "house", laAdmin = false, chuDe = {}, bai = [];
+
+Mo.gate(async (me) => {
+  if (!["admin", "manager"].includes(me.role)) return $("#chanQuyen").classList.remove("hide");
+  laAdmin = me.isAdmin;
+  $("#noiDung").classList.remove("hide");
+  if (laAdmin) $("#themChuDe").classList.remove("hide");
+  document.querySelectorAll("[data-brand]").forEach((b) => (b.onclick = () => {
+    brand = b.dataset.brand;
+    document.querySelectorAll("[data-brand]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    taiLai();
+  }));
+  document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
+  $("#cdLuu").onclick = themChuDe;
+  $("#locTT").onchange = veBai; $("#locTim").oninput = veBai;
+  taiLai();
+});
+
+async function taiLai() {
+  const [{ data: cd }, { data: ps, error }] = await Promise.all([
+    sb.from("content_topics").select("*").eq("brand", brand).order("created_at", { ascending: false }).limit(300),
+    sb.from("content_posts").select("*").eq("brand", brand).is("deleted_at", null).order("created_at", { ascending: false }).limit(200),
+  ]);
+  if (error) return toast("Lỗi: " + error.message);
+  chuDe = Object.fromEntries((cd ?? []).map((t) => [t.id, t]));
+  bai = ps ?? [];
+  veHangDoi(cd ?? []); veBai();
+}
+
+// ---------- Hàng đợi ----------
+function veHangDoi(ds) {
+  const cho = ds.filter((t) => t.status === "cho").sort((a, b) => b.priority - a.priority || a.created_at.localeCompare(b.created_at));
+  $("#hangDoi").innerHTML = cho.length ? cho.map((t, i) => `
+    <div class="link-hang">
+      <div class="ten">${i + 1}. ${esc(t.topic)}<small>${esc(t.format || "định dạng mặc định")} · ưu tiên ${t.priority}${t.notes ? " · " + esc(t.notes) : ""}</small></div>
+      ${laAdmin ? `<button class="btn nho" data-len="${t.id}" title="Viết sớm hơn">↑</button>
+        <button class="btn nho" data-sua="${t.id}">Sửa</button>
+        <button class="btn chu" data-huy="${t.id}">Hủy</button>` : ""}
+    </div>`).join("") : `<p class="trong">Hàng đợi trống — khung giờ tới sẽ bỏ qua. Thêm chủ đề ở trên hoặc nhắn /chude cho bot.</p>`;
+  $("#hangDoi").onclick = async (e) => {
+    const d = e.target.dataset, t = chuDe[d.len || d.sua || d.huy];
+    if (!t) return;
+    let patch = null;
+    if (d.len) patch = { priority: Math.max(...cho.map((x) => x.priority)) + 1 };
+    if (d.huy && confirm("Hủy chủ đề này?")) patch = { status: "huy" };
+    if (d.sua) {
+      const moi = prompt("Sửa chủ đề:", t.topic); if (moi === null) return;
+      const dd = prompt("Định dạng (để trống = mặc định):", t.format ?? ""); if (dd === null) return;
+      patch = { topic: moi.trim(), format: dd.trim() || null };
+    }
+    if (!patch) return;
+    const { error } = await sb.from("content_topics").update(patch).eq("id", t.id);
+    toast(error ? "Lỗi: " + error.message : "Đã lưu"); taiLai();
+  };
+}
+
+async function themChuDe() {
+  const row = { brand, topic: $("#cdTopic").value.trim(), format: $("#cdFormat").value.trim() || null,
+    priority: Number($("#cdPrio").value) || 0, notes: $("#cdNotes").value.trim() || null };
+  if (!row.topic) return toast("Ghi chủ đề trước khi thêm");
+  const { error } = await sb.from("content_topics").insert(row);
+  if (error) return toast("Lỗi: " + error.message);
+  ["#cdTopic", "#cdFormat", "#cdNotes"].forEach((s) => ($(s).value = "")); $("#cdPrio").value = 0;
+  toast("Đã thêm vào hàng đợi"); taiLai();
+}
+
+// ---------- Bài viết ----------
+async function veBai() {
+  const tt = $("#locTT").value, tim = $("#locTim").value.trim().toLowerCase();
+  const ds = bai.filter((p) => (tt ? p.status === tt : p.status !== "huy")
+    && (!tim || (chuDe[p.topic_id]?.topic ?? "").toLowerCase().includes(tim)));
+  if (!ds.length) return ($("#dsBai").innerHTML = `<p class="trong">Chưa có bài nào.</p>`);
+  // Nội dung phiên bản hiện tại
+  const ids = ds.filter((p) => p.current_version > 0).map((p) => p.id);
+  const { data: vs } = ids.length ? await sb.from("content_versions").select("post_id,version_no,body").in("post_id", ids) : { data: [] };
+  const hienTai = {};
+  for (const v of vs ?? []) { const p = ds.find((x) => x.id === v.post_id); if (p && v.version_no === p.current_version) hienTai[p.id] = v.body; }
+  $("#dsBai").innerHTML = ds.map((p) => {
+    const t = chuDe[p.topic_id];
+    return `<div class="bai">
+      <div><span class="nhan-tt">${TT[p.status]}</span>${p.engine === "du_phong" ? `<span class="nhan-tt du-phong">BẢN DỰ PHÒNG</span>` : ""}</div>
+      <b>${esc(t?.topic ?? "(chưa gắn chủ đề)")}</b>
+      <div class="meta">${esc(t?.format || "định dạng mặc định")} · ${new Date(p.created_at).toLocaleDateString("vi-VN")} · bản ${p.current_version}
+        ${p.engine ? " · " + (p.engine === "claude" ? "Claude" : "dự phòng") : ""}${p.published_url ? ` · <a href="${esc(p.published_url)}" target="_blank" rel="noopener">link bài đã đăng</a>` : ""}</div>
+      ${hienTai[p.id] ? `<pre>${esc(hienTai[p.id])}</pre>` : ""}
+      ${p.feedback_pending ? `<div class="meta">Yêu cầu sửa đang chờ: ${esc(p.feedback_pending)}</div>` : ""}
+      <div class="hanh-dong">
+        ${hienTai[p.id] ? `<button class="btn nho" data-chep="${p.id}">Sao chép</button>` : ""}
+        ${p.current_version > 1 ? `<button class="btn nho" data-ban="${p.id}">Các phiên bản</button>` : ""}
+        ${laAdmin && p.status === "da_duyet" ? `<button class="btn nho reu" data-dang="${p.id}">Đã đăng</button>` : ""}
+      </div></div>`;
+  }).join("");
+  $("#dsBai").onclick = async (e) => {
+    const d = e.target.dataset;
+    if (d.chep) copy(hienTai[d.chep]);
+    if (d.ban) return xemPhienBan(Number(d.ban));
+    if (d.dang) {
+      const url = prompt("Dán link bài đã đăng (bắt đầu bằng https://):"); if (!url) return;
+      if (!/^https?:\/\//.test(url.trim())) return toast("Link phải bắt đầu bằng http:// hoặc https://");
+      const { error } = await sb.from("content_posts").update({ status: "da_dang", published_url: url.trim(), published_at: new Date().toISOString() }).eq("id", d.dang);
+      toast(error ? "Lỗi: " + error.message : "Đã đánh dấu đã đăng"); taiLai();
+    }
+  };
+}
+
+async function xemPhienBan(id) {
+  const { data } = await sb.from("content_versions").select("*").eq("post_id", id).order("version_no", { ascending: false });
+  $("#banTieuDe").textContent = "Các phiên bản — " + (chuDe[bai.find((p) => p.id === id)?.topic_id]?.topic ?? "");
+  $("#banNoiDung").innerHTML = (data ?? []).map((v) => `<div class="bai">
+    <b>Bản ${v.version_no}</b> <span class="meta">${new Date(v.created_at).toLocaleString("vi-VN")} · ${v.engine === "claude" ? "Claude" : "dự phòng"} · ${esc(v.created_by ?? "")}</span>
+    ${v.feedback_before ? `<div class="meta">Yêu cầu sửa: ${esc(v.feedback_before)}</div>` : ""}
+    <pre>${esc(v.body)}</pre></div>`).join("");
+  $("#dlgBan").showModal();
+}
+</script>
+</body>
+</html>
