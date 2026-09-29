@@ -100,7 +100,7 @@ reset role;
 do $$
 declare f text;
 begin
-  foreach f in array array['content_nhan_viec(text, boolean, text, timestamptz)', 'content_nop_bai(bigint, text, text, text)',
+  foreach f in array array['content_nhan_viec(text, boolean, text, timestamptz)', 'content_nop_bai(bigint, text, text, text, jsonb)',
                            'content_nha_viec(bigint, text)', 'content_chat_admin()', 'content_luu_skill(text, text, text)', 'content_lay_skill(text)'] loop
     if has_function_privilege('authenticated', 'public.' || f, 'execute') or has_function_privilege('anon', 'public.' || f, 'execute') then
       raise exception 'FAIL 9a: % gọi được từ ngoài máy chủ', f; end if;

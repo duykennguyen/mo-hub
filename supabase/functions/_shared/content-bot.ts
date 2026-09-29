@@ -32,7 +32,25 @@ export function chiaTin(text: string, max = 3800): string[] {
   return ra;
 }
 
-export type GoiNop = { post_id: number; brand: Brand; chu_de: string | null; dinh_dang: string | null; phien_ban: number; engine: string; body: string };
+export type PhuongAn = { so: number; phong_cach: string; body: string };
+export type GoiNop = { post_id: number; brand: Brand; chu_de: string | null; dinh_dang: string | null; phien_ban: number; engine: string; body: string;
+  options?: PhuongAn[] | null };
+
+// Tách bài thành 3 phương án theo dòng tiêu đề "=== PHƯƠNG ÁN 1 · <phong cách> ===" (chịu được **, #, dấu – : ·).
+// Không đủ đúng 3 phương án 1-2-3, mỗi phương án có nội dung → trả null.
+const DONG_PA = /^[\s#*_>]*=*\s*PHƯƠNG\s+ÁN\s*([1-3])(?![0-9])\s*(?:[·:.\-–—|]\s*)?(.*?)[\s=*_]*$/iu;
+export function tachPhuongAn(body: string): PhuongAn[] | null {
+  const ra: PhuongAn[] = [];
+  let hienTai: PhuongAn | null = null;
+  for (const dong of body.normalize("NFC").split(/\r?\n/)) {
+    const m = dong.match(DONG_PA);
+    if (m) { hienTai = { so: Number(m[1]), phong_cach: m[2].trim(), body: "" }; ra.push(hienTai); continue; }
+    if (hienTai) hienTai.body += dong + "\n";
+  }
+  for (const pa of ra) pa.body = pa.body.trim();
+  if (ra.length !== 3 || ra.some((pa, i) => pa.so !== i + 1 || !pa.body)) return null;
+  return ra;
+}
 
 export function dauNhap(g: GoiNop): string {
   return [
@@ -43,6 +61,13 @@ export function dauNhap(g: GoiNop): string {
   ].filter(Boolean).join("\n");
 }
 
+export const nutChon = (id: number, so: number) => ({ inline_keyboard: [[{ text: `✅ Chọn phương án ${so}`, callback_data: `d:${id}:${so}` }]] });
+export const nutCuoi = (id: number) => ({
+  inline_keyboard: [[
+    { text: "✏️ Viết lại cả 3", callback_data: `r:${id}` },
+    { text: "✖ Hủy", callback_data: `h:${id}` },
+  ]],
+});
 export const nutNhap = (id: number) => ({
   inline_keyboard: [[
     { text: "✅ Duyệt", callback_data: `d:${id}` },
@@ -52,7 +77,23 @@ export const nutNhap = (id: number) => ({
 });
 
 // Gửi nháp cho mọi admin đã liên kết; trả id tin cuối (tin mang nút) của chat đầu tiên
+// Có 3 phương án: 1 tin đầu + mỗi phương án 1 tin kèm nút "Chọn" (dễ sao chép) + 1 tin cuối có Viết lại / Hủy.
 export async function guiNhap(tg: Tg, chats: number[], g: GoiNop): Promise<number | null> {
+  if (g.options?.length) {
+    let idCuoi: number | null = null;
+    for (const chat of chats) {
+      const gui = (text: string, reply_markup?: unknown) =>
+        tg("sendMessage", { chat_id: chat, text, disable_web_page_preview: true, ...(reply_markup ? { reply_markup } : {}) });
+      await gui(`${dauNhap(g)}\n${g.options.length} phương án — bấm "Chọn" dưới phương án anh ưng.`);
+      for (const pa of g.options) {
+        const phan = chiaTin(`▸ Phương án ${pa.so}${pa.phong_cach ? " · " + pa.phong_cach : ""}\n\n${pa.body}`);
+        for (let i = 0; i < phan.length; i++) await gui(phan[i], i === phan.length - 1 ? nutChon(g.post_id, pa.so) : undefined);
+      }
+      const r = await gui(`Chưa ưng cả ${g.options.length}? Bấm Viết lại rồi nhắn yêu cầu sửa (có thể nói rõ phương án nào).`, nutCuoi(g.post_id));
+      if (idCuoi === null) idCuoi = r?.result?.message_id ?? null;
+    }
+    return idCuoi;
+  }
   const phan = chiaTin(`${dauNhap(g)}\n${g.body}`);
   let idCuoi: number | null = null;
   for (const chat of chats) {
@@ -67,7 +108,7 @@ export async function guiNhap(tg: Tg, chats: number[], g: GoiNop): Promise<numbe
 
 export function huongDan(b: Brand, hub: string): string {
   return `Bot Content ${TEN[b]} ✍️
-Mỗi ngày ${GIO[b]} tôi gửi 1 bài NHÁP theo chủ đề trong hàng đợi. Tôi không tự đăng gì, và hàng đợi trống thì tôi không tự nghĩ chủ đề.
+Mỗi ngày ${GIO[b]} tôi gửi bài NHÁP (3 phương án, 3 phong cách) theo chủ đề trong hàng đợi. Tôi không tự đăng gì, và hàng đợi trống thì tôi không tự nghĩ chủ đề.
 
 /chude <nội dung> — thêm chủ đề vào hàng đợi
 /chude <nội dung> | <định dạng> — kèm định dạng, ví dụ: | caption IG
@@ -75,7 +116,7 @@ Mỗi ngày ${GIO[b]} tôi gửi 1 bài NHÁP theo chủ đề trong hàng đợ
 /vietngay — viết ngay chủ đề kế tiếp (không chờ ${GIO[b]})
 /kho — mở Kho Content
 
-Dưới mỗi bài nháp có nút ✅ Duyệt · ✏️ Viết lại · ✖ Hủy.
+Dưới mỗi phương án có nút ✅ Chọn; cuối bài có ✏️ Viết lại · ✖ Hủy.
 Bấm Viết lại rồi nhắn yêu cầu sửa trong tin kế tiếp.
 ${hub ? hub + "/content.html" : ""}`;
 }
@@ -141,12 +182,12 @@ async function xuLyTin(p: Phien, d: BotDeps, text: string, chat: number) {
   if (cmd === "/vietngay") {
     const { data: dang } = await db.from("content_posts").select("id").eq("brand", b).eq("current_version", 0)
       .in("status", ["cho_viet", "dang_viet"]).is("deleted_at", null).limit(1);
-    if (dang?.length) return gui("Đã có một yêu cầu viết đang chờ. Máy của anh sẽ viết trong vòng 10 phút khi đang bật.");
+    if (dang?.length) return gui("Đã có một yêu cầu viết đang chờ. Máy của anh sẽ viết trong khoảng 1 phút khi đang bật.");
     const { count } = await db.from("content_topics").select("id", { count: "exact", head: true }).eq("brand", b).eq("status", "cho");
     if (!count) return gui(`Hàng đợi ${TEN[b]} trống — thêm chủ đề bằng /chude trước.`);
     const { error } = await db.from("content_posts").insert({ brand: b, status: "cho_viet" });
     if (error) return gui("❌ " + error.message);
-    return gui("✍️ Đã nhận. Máy của anh sẽ viết chủ đề kế tiếp trong vòng 10 phút (khi máy đang bật).");
+    return gui("✍️ Đã nhận. Máy của anh đang viết chủ đề kế tiếp — bài tới trong khoảng 1 phút (khi máy đang bật).");
   }
 
   if (cmd.startsWith("/")) return gui("Không hiểu lệnh này. Gõ /help.");
@@ -159,7 +200,7 @@ async function xuLyTin(p: Phien, d: BotDeps, text: string, chat: number) {
     .eq("id", cho.post_id).in("status", ["cho_duyet", "can_viet_lai"]).select("id").maybeSingle();
   await db.from("content_cho_phan_hoi").delete().eq("chat_id", chat).eq("brand", b);
   if (error || !sua) return gui("Bài này không còn ở trạng thái chờ duyệt, không viết lại được.");
-  return gui(`📝 Đã ghi yêu cầu sửa cho bài #${cho.post_id}. Bản mới sẽ tới trong vòng 10 phút khi máy của anh đang bật.`);
+  return gui(`📝 Đã ghi yêu cầu sửa cho bài #${cho.post_id}. Bản mới sẽ tới trong khoảng 1 phút khi máy của anh đang bật.`);
 }
 
 async function xuLyNut(p: Phien, d: BotDeps, cq: any, chat: number) {
@@ -171,12 +212,16 @@ async function xuLyNut(p: Phien, d: BotDeps, cq: any, chat: number) {
   if (!id) return dap("Nút không hợp lệ");
 
   if (loai === "d") {
-    const { data } = await db.from("content_posts").update({ status: "da_duyet", approved_at: new Date().toISOString() })
+    const so = c ? Number(c) : null;                          // d:<id>:<phương án>; nút cũ d:<id> không có số
+    if (so !== null && ![1, 2, 3].includes(so)) return dap("Nút không hợp lệ");
+    const { data } = await db.from("content_posts")
+      .update({ status: "da_duyet", approved_at: new Date().toISOString(), ...(so ? { chosen_option: so } : {}) })
       .eq("id", id).eq("brand", b).eq("status", "cho_duyet").select("id").maybeSingle();
     if (!data) return dap("Bài không còn chờ duyệt");
     await boNut();
-    await d.tg("sendMessage", { chat_id: chat, text: `✅ Đã vào kho (#${id}). Đăng xong nhớ bấm "Đã đăng" trên Kho Content.` });
-    return dap("Đã vào kho");
+    await d.tg("sendMessage", { chat_id: chat,
+      text: `✅ Đã chọn${so ? ` phương án ${so}` : ""} — bài #${id} đã vào kho. Đăng xong nhớ bấm "Đã đăng" trên Kho Content.` });
+    return dap(so ? `Đã chọn phương án ${so}` : "Đã vào kho");
   }
   if (loai === "r") {
     const { data: bai } = await db.from("content_posts").select("status").eq("id", id).eq("brand", b).maybeSingle();
@@ -233,11 +278,19 @@ export function taoLoiNhan(skill: string, v: Viec): string {
     `Thương hiệu: ${TEN[v.brand]}`,
     `Chủ đề: ${v.chu_de ?? ""}`,
     `Định dạng: ${v.dinh_dang || "theo định dạng mặc định trong hướng dẫn ở trên"}`,
+    'Viết 3 PHƯƠNG ÁN cho cùng chủ đề, theo 3 phong cách ở mục "Ba phong cách" phía trên (mỗi phương án một phong cách, khác nhau rõ rệt).',
     v.ghi_chu ? `Ghi chú của Duy: ${v.ghi_chu}` : "",
     v.ban_truoc ? `\n=== BẢN TRƯỚC (bản ${v.phien_ban_moi - 1}) ===\n${v.ban_truoc}` : "",
-    v.yeu_cau_sua ? `\n=== YÊU CẦU SỬA CỦA DUY ===\n${v.yeu_cau_sua}\nViết lại bài theo yêu cầu này, giữ những gì không bị yêu cầu đổi.` : "",
+    v.yeu_cau_sua ? `\n=== YÊU CẦU SỬA CỦA DUY ===\n${v.yeu_cau_sua}\nViết lại cả 3 phương án theo yêu cầu này, giữ những gì không bị yêu cầu đổi. Nếu yêu cầu chỉ nhắm vào một phương án, vẫn trả đủ 3.` : "",
     "",
-    "Chỉ trả về nội dung bài viết hoàn chỉnh bằng tiếng Việt (markdown thuần), không lời dẫn, không giải thích, không hỏi lại.",
+    "Trả về ĐÚNG khuôn sau, không lời dẫn, không giải thích, không hỏi lại:",
+    "=== PHƯƠNG ÁN 1 · <tên phong cách> ===",
+    "<bài hoàn chỉnh>",
+    "=== PHƯƠNG ÁN 2 · <tên phong cách> ===",
+    "<bài hoàn chỉnh>",
+    "=== PHƯƠNG ÁN 3 · <tên phong cách> ===",
+    "<bài hoàn chỉnh>",
+    "Mỗi bài bằng tiếng Việt (markdown thuần), đăng được ngay.",
     "Không bịa số liệu, giá, giải thưởng hay lời khách. Không có thông tin nào về khách, số điện thoại, giấy tờ, pháp lý.",
   ].filter((x) => x !== "").join("\n");
 }

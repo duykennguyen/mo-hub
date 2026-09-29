@@ -16,6 +16,9 @@
   .bai .meta { font-size: 13px; color: var(--tro); }
   .nhan-tt { display: inline-block; font-size: 12px; padding: 2px 8px; border: 1px solid var(--vien); margin-right: 6px; }
   .du-phong { color: var(--canh-bao); border-color: var(--canh-bao); }
+  .phuong-an { border-left: 3px solid var(--vien); padding-left: 10px; margin-top: 10px; }
+  .phuong-an.da-chon { border-left-color: var(--reu-dam); }
+  .phuong-an .meta .btn { margin-left: 8px; }
   .loc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   @media (max-width: 560px) { .loc { grid-template-columns: 1fr; } }
 </style>
@@ -153,9 +156,18 @@ async function veBai() {
   if (!ds.length) return ($("#dsBai").innerHTML = `<p class="trong">Chưa có bài nào.</p>`);
   // Nội dung phiên bản hiện tại
   const ids = ds.filter((p) => p.current_version > 0).map((p) => p.id);
-  const { data: vs } = ids.length ? await sb.from("content_versions").select("post_id,version_no,body").in("post_id", ids) : { data: [] };
-  const hienTai = {};
-  for (const v of vs ?? []) { const p = ds.find((x) => x.id === v.post_id); if (p && v.version_no === p.current_version) hienTai[p.id] = v.body; }
+  const { data: vs } = ids.length ? await sb.from("content_versions").select("post_id,version_no,body,options").in("post_id", ids) : { data: [] };
+  const hienTai = {}, phuongAn = {};
+  for (const v of vs ?? []) {
+    const p = ds.find((x) => x.id === v.post_id);
+    if (p && v.version_no === p.current_version) { hienTai[p.id] = v.body; if (v.options?.length) phuongAn[p.id] = v.options; }
+  }
+  // Đã chọn phương án thì "Sao chép" lấy đúng phương án đó
+  const banChep = (p) => phuongAn[p.id] && p.chosen_option ? phuongAn[p.id][p.chosen_option - 1]?.body : hienTai[p.id];
+  const vePhuongAn = (p) => phuongAn[p.id].map((o) => `<div class="phuong-an${p.chosen_option === o.so ? " da-chon" : ""}">
+      <div class="meta"><b>Phương án ${o.so}</b>${o.phong_cach ? " · " + esc(o.phong_cach) : ""}${p.chosen_option === o.so ? " · ✅ đã chọn" : ""}
+        <button class="btn nho" data-chep-pa="${p.id}:${o.so}">Sao chép</button></div>
+      <pre>${esc(o.body)}</pre></div>`).join("");
   $("#dsBai").innerHTML = ds.map((p) => {
     const t = chuDe[p.topic_id];
     return `<div class="bai">
@@ -163,17 +175,18 @@ async function veBai() {
       <b>${esc(t?.topic ?? "(chưa gắn chủ đề)")}</b>
       <div class="meta">${esc(t?.format || "định dạng mặc định")} · ${new Date(p.created_at).toLocaleDateString("vi-VN")} · bản ${p.current_version}
         ${p.engine ? " · " + (p.engine === "claude" ? "Claude" : "dự phòng") : ""}${p.published_url ? ` · <a href="${esc(p.published_url)}" target="_blank" rel="noopener">link bài đã đăng</a>` : ""}</div>
-      ${hienTai[p.id] ? `<pre>${esc(hienTai[p.id])}</pre>` : ""}
+      ${phuongAn[p.id] ? vePhuongAn(p) : hienTai[p.id] ? `<pre>${esc(hienTai[p.id])}</pre>` : ""}
       ${p.feedback_pending ? `<div class="meta">Yêu cầu sửa đang chờ: ${esc(p.feedback_pending)}</div>` : ""}
       <div class="hanh-dong">
-        ${hienTai[p.id] ? `<button class="btn nho" data-chep="${p.id}">Sao chép</button>` : ""}
+        ${hienTai[p.id] && (!phuongAn[p.id] || p.chosen_option) ? `<button class="btn nho" data-chep="${p.id}">Sao chép${p.chosen_option ? ` phương án ${p.chosen_option}` : ""}</button>` : ""}
         ${p.current_version > 1 ? `<button class="btn nho" data-ban="${p.id}">Các phiên bản</button>` : ""}
         ${laAdmin && p.status === "da_duyet" ? `<button class="btn nho reu" data-dang="${p.id}">Đã đăng</button>` : ""}
       </div></div>`;
   }).join("");
   $("#dsBai").onclick = async (e) => {
     const d = e.target.dataset;
-    if (d.chep) copy(hienTai[d.chep]);
+    if (d.chep) copy(banChep(ds.find((x) => x.id === Number(d.chep))));
+    if (d.chepPa) { const [id, so] = d.chepPa.split(":").map(Number); copy(phuongAn[id][so - 1].body); }
     if (d.ban) return xemPhienBan(Number(d.ban));
     if (d.dang) {
       const url = prompt("Dán link bài đã đăng (bắt đầu bằng https://):"); if (!url) return;

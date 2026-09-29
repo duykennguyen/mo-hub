@@ -1,6 +1,6 @@
 // Test bot Content: đọc lệnh, chia tin, gửi nháp, và luồng nút Duyệt / Viết lại / Hủy với database giả.
 import { assert, assertEquals } from "jsr:@std/assert";
-import { chiaTin, dauNhap, docChuDe, guiNhap, rutGonSkill, taoLoiNhan, xuLyUpdate, type BotDeps } from "./content-bot.ts";
+import { chiaTin, dauNhap, docChuDe, guiNhap, rutGonSkill, tachPhuongAn, taoLoiNhan, xuLyUpdate, type BotDeps } from "./content-bot.ts";
 
 // ---------- Database giả: ghi lại mọi truy vấn, trả kết quả theo hàm xuLy ----------
 type Q = { bang: string; loai: string; du_lieu?: any; loc: [string, string, any][]; head?: boolean };
@@ -152,6 +152,71 @@ Deno.test("Hủy + trả chủ đề về hàng đợi", async () => {
   const tp = db.nhatKy.find((q) => q.bang === "content_topics")!;
   assertEquals(tp.du_lieu, { status: "cho" });
   assert(tp.loc.some(([_, c, v]) => c === "id" && v === 42));
+});
+
+// ---------- 3 phương án ----------
+const BA = `=== PHƯƠNG ÁN 1 · Kể chuyện ===
+Sáng nay nắng vàng.
+
+Chăn phơi trên lan can.
+=== PHƯƠNG ÁN 2 · Ngắn, tinh nghịch ===
+Sun . Bed . Now
+=== PHƯƠNG ÁN 3 · Thơ ===
+nắng ghé qua gối`;
+
+Deno.test("tách 3 phương án: tên phong cách và nội dung nhiều đoạn", () => {
+  const pa = tachPhuongAn(BA)!;
+  assertEquals(pa.map((x) => [x.so, x.phong_cach]), [[1, "Kể chuyện"], [2, "Ngắn, tinh nghịch"], [3, "Thơ"]]);
+  assertEquals(pa[0].body, "Sáng nay nắng vàng.\n\nChăn phơi trên lan can.");
+});
+
+Deno.test("tách 3 phương án: chịu được markdown đậm, dấu gạch, chữ thường, lời dẫn phía trước", () => {
+  const s = "Đây là 3 phương án:\n**Phương án 1 – Mềm mại**\nA\n## PHƯƠNG ÁN 2: Tinh nghịch\nB\nphương án 3\nC";
+  const pa = tachPhuongAn(s)!;
+  assertEquals(pa.map((x) => x.phong_cach), ["Mềm mại", "Tinh nghịch", ""]);
+  assertEquals(pa.map((x) => x.body), ["A", "B", "C"]);
+});
+
+Deno.test("tách 3 phương án: thiếu, trùng số hoặc rỗng → null (gửi nguyên bài)", () => {
+  assertEquals(tachPhuongAn("Một bài bình thường, không chia phương án."), null);
+  assertEquals(tachPhuongAn("=== PHƯƠNG ÁN 1 ===\nA\n=== PHƯƠNG ÁN 2 ===\nB"), null);
+  assertEquals(tachPhuongAn("=== PHƯƠNG ÁN 1 ===\nA\n=== PHƯƠNG ÁN 1 ===\nB\n=== PHƯƠNG ÁN 3 ===\nC"), null);
+  assertEquals(tachPhuongAn("=== PHƯƠNG ÁN 1 ===\nA\n=== PHƯƠNG ÁN 2 ===\n\n=== PHƯƠNG ÁN 3 ===\nC"), null);
+});
+
+Deno.test("gửi 3 phương án: mỗi phương án 1 tin có nút Chọn riêng, tin cuối có Viết lại / Hủy", async () => {
+  const gui: any[] = [];
+  const tg = (_m: string, b: any) => { gui.push(b); return Promise.resolve({ result: { message_id: gui.length } }); };
+  const id = await guiNhap(tg, [11], { post_id: 7, brand: "bedding", chu_de: "Phơi chăn", dinh_dang: null, phien_ban: 1,
+    engine: "claude", body: BA, options: tachPhuongAn(BA) });
+  assertEquals(gui.length, 5);                        // đầu + 3 phương án + cuối
+  assertEquals(gui.slice(1, 4).map((b) => b.reply_markup.inline_keyboard[0][0].callback_data), ["d:7:1", "d:7:2", "d:7:3"]);
+  assert(gui[2].text.startsWith("▸ Phương án 2 · Ngắn, tinh nghịch"));
+  assertEquals(gui[4].reply_markup.inline_keyboard[0].map((n: any) => n.callback_data), ["r:7", "h:7"]);
+  assertEquals(id, 5);
+});
+
+Deno.test("bấm Chọn phương án 2: duyệt bài và ghi chosen_option = 2", async () => {
+  const db = dbGia((q) => q.loai === "update" ? { data: { id: 7 }, error: null } : null);
+  const { d, tin: t } = deps(db);
+  await xuLyUpdate(nut("d:7:2"), d);
+  const up = db.nhatKy.find((q) => q.loai === "update")!;
+  assertEquals(up.du_lieu.status, "da_duyet");
+  assertEquals(up.du_lieu.chosen_option, 2);
+  assert(t.some((x) => x.text?.includes("phương án 2")));
+});
+
+Deno.test("nút Chọn với số phương án lạ: không ghi gì", async () => {
+  const db = dbGia(() => { throw new Error("không được truy vấn"); });
+  const { d } = deps(db);
+  await xuLyUpdate(nut("d:7:9"), d);
+  assertEquals(db.nhatKy.length, 0);
+});
+
+Deno.test("lời nhắn yêu cầu đúng khuôn 3 phương án", () => {
+  const s = taoLoiNhan("SKILL", { post_id: 1, loai: "viet_ngay", brand: "bedding", chu_de: "Phơi chăn", dinh_dang: null, ghi_chu: null,
+    phien_ban_moi: 1, yeu_cau_sua: null, ban_truoc: null });
+  assert(s.includes("3 PHƯƠNG ÁN") && s.includes("=== PHƯƠNG ÁN 3 · <tên phong cách> ==="));
 });
 
 Deno.test("bản rút gọn skill bỏ phần đầu và phần tri thức nội bộ", () => {

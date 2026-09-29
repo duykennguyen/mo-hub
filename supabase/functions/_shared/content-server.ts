@@ -1,7 +1,7 @@
 // Phần gọi mạng của hệ bot Content: tạo client, gọi Telegram, dựng handler cho từng Edge Function.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { khopBiMat } from "../thuki-bot/danh-tinh.ts";
-import { guiNhap, nhacHangDoi, taoLoiNhan, TEN, xuLyUpdate, type Brand, type GoiNop, type Viec } from "./content-bot.ts";
+import { guiNhap, nhacHangDoi, tachPhuongAn, taoLoiNhan, TEN, xuLyUpdate, type Brand, type GoiNop, type Viec } from "./content-bot.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const URL_SB = env("SUPABASE_URL");
@@ -56,11 +56,13 @@ export function botContent(b: Brand) {
 }
 
 // ---------- Nộp bài rồi gửi nháp cho admin ----------
+// Tách được 3 phương án thì lưu có cấu trúc và gửi từng phương án; không tách được thì gửi nguyên bài như cũ.
 export async function nopVaGui(postId: number, ai: string, body: string, engine: "claude" | "du_phong"): Promise<GoiNop> {
-  const { data, error } = await may.rpc("content_nop_bai", { p_post: postId, p_ai: ai, p_body: body, p_engine: engine });
+  const options = tachPhuongAn(body);
+  const { data, error } = await may.rpc("content_nop_bai", { p_post: postId, p_ai: ai, p_body: body, p_engine: engine, p_options: options });
   if (error) throw new Error(error.message);
   const g: GoiNop = { post_id: data.post_id, brand: data.brand, chu_de: data.chu_de, dinh_dang: data.dinh_dang,
-    phien_ban: data.phien_ban, engine: data.engine, body: data.body };
+    phien_ban: data.phien_ban, engine: data.engine, body: data.body, options: data.options };
   const { data: chats } = await may.rpc("content_chat_admin");
   const msg = await guiNhap(tgCua(g.brand), chats ?? [], g);
   if (msg) await may.rpc("content_gan_tin", { p_post: postId, p_msg: msg });
@@ -76,9 +78,14 @@ export async function contentApi(req: Request): Promise<Response> {
   try {
     switch (j.action) {
       case "nhan": {       // runner luôn là 'may-duy'; không cho runner xưng là bộ máy dự phòng
-        const { data, error } = await may.rpc("content_nhan_viec", { p_ai: "may-duy", p_chi_khung_gio: false, p_brand: null });
-        if (error) throw error;
-        return tra({ viec: data });
+        // "cho": giây chờ việc (hỏi-chờ, tối đa 25) — có việc là trả ngay, nên bài bắt đầu viết chỉ vài giây sau khi Duy nhắn
+        const het = Date.now() + Math.min(Math.max(Number(j.cho) || 0, 0), 25) * 1000;
+        for (;;) {
+          const { data, error } = await may.rpc("content_nhan_viec", { p_ai: "may-duy", p_chi_khung_gio: false, p_brand: null });
+          if (error) throw error;
+          if (data || Date.now() + 2000 > het) return tra({ viec: data });
+          await new Promise((r) => setTimeout(r, 2000));
+        }
       }
       case "nop": {
         const body = String(j.body ?? "").trim();
