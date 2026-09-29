@@ -9,18 +9,56 @@
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css?v=2">
 <style>
-  .tab-hang { display: flex; gap: 8px; margin: 8px 0 16px; flex-wrap: wrap; }
+  /* Trang rộng hơn các trang khác: 2 cột trên máy tính, 1 cột trên điện thoại */
+  #app .wrap { max-width: 1280px; padding-bottom: 32px; }
+  .thanh-dau { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 14px; }
+  .thanh-dau .muted { margin: 0; flex: 1 1 280px; }
+  .tab-hang { display: flex; gap: 6px; }
   .tab-hang .btn[aria-pressed="true"] { background: var(--nau-dam); color: var(--giay); border-color: var(--nau-dam); }
-  .bai { background: var(--giay); border: 1px solid var(--vien); padding: 14px; margin-bottom: 12px; }
-  .bai pre { white-space: pre-wrap; font-family: inherit; margin: 10px 0; max-height: 260px; overflow: auto; background: var(--nen); padding: 10px; }
-  .bai .meta { font-size: 13px; color: var(--tro); }
-  .nhan-tt { display: inline-block; font-size: 12px; padding: 2px 8px; border: 1px solid var(--vien); margin-right: 6px; }
+
+  .bo-cuc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }  /* minmax(0,…): không để lưới phương án đẩy trang rộng ra */
+  @media (min-width: 900px) {
+    .bo-cuc { grid-template-columns: 320px minmax(0, 1fr); }
+    .cot-trai { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+  }
+  .khoi { background: var(--giay); border: 1px solid var(--vien); border-radius: 10px; padding: 12px 14px; }
+  .khoi-dau { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .bo-cuc h2 { margin: 0; font-size: 1.1rem; }
+  .dem { font: 500 .8rem var(--sans); color: var(--tro); margin-left: 4px; }
+  .bo-cuc .trong { padding: 16px 8px; }
+
+  /* Hàng đợi + form thêm chủ đề (thu gọn) */
+  #themChuDe summary { list-style: none; cursor: pointer; }
+  #themChuDe summary::-webkit-details-marker { display: none; }
+  #themChuDe[open] summary { margin-bottom: 4px; }
+  #themChuDe label { margin: 6px 0 3px; }
+  #hangDoi .link-hang { padding: 7px 0; gap: 4px; }
+  #hangDoi .link-hang:last-child { border-bottom: none; }
+  #hangDoi .ten { font-size: .92rem; }
+
+  /* Bài viết */
+  .loc { display: flex; gap: 8px; flex-wrap: wrap; }
+  .loc select { width: auto; }
+  .loc input { width: 200px; }
+  .bai { background: var(--giay); border: 1px solid var(--vien); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; }
+  .bai-dau { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; }
+  .bai-dau b { flex: 1 1 220px; }
+  .bai .meta { font-size: 12.5px; color: var(--tro); }
+  .nhan-tt { display: inline-block; font-size: 12px; padding: 1px 8px; border: 1px solid var(--vien); border-radius: 999px; white-space: nowrap; }
+  .nhan-tt.cho_duyet { border-color: var(--nau-dam); color: var(--nau-dam); }
+  .nhan-tt.da_duyet, .nhan-tt.da_dang { border-color: var(--reu-dam); color: var(--reu-dam); }
   .du-phong { color: var(--canh-bao); border-color: var(--canh-bao); }
-  .phuong-an { border-left: 3px solid var(--vien); padding-left: 10px; margin-top: 10px; }
-  .phuong-an.da-chon { border-left-color: var(--reu-dam); }
-  .phuong-an .meta .btn { margin-left: 8px; }
-  .loc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  @media (max-width: 560px) { .loc { grid-template-columns: 1fr; } }
+  .bai pre { white-space: pre-wrap; font: inherit; font-size: .9rem; margin: 6px 0 0; max-height: 300px; overflow: auto;
+             background: var(--nen); padding: 8px 10px; border-radius: 8px; }
+  .pa-luoi { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 8px; margin-top: 8px; }
+  .phuong-an { background: var(--nen); border-radius: 8px; border-top: 3px solid var(--vien); padding: 6px 10px 8px; min-width: 0; }
+  .phuong-an.da-chon { border-top-color: var(--reu-dam); }
+  .phuong-an pre { background: none; padding: 0; margin-top: 4px; }
+  .pa-dau { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; font-size: .8rem; color: var(--tro); }
+  .pa-dau .btn { white-space: nowrap; flex: none; padding: 0 2px; min-height: 0; }
+  .hanh-dong { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .hanh-dong:empty { display: none; }
+  @media (max-width: 560px) { .loc select, .loc input { width: 100%; } }
 </style>
 </head>
 <body>
@@ -33,40 +71,46 @@
     </header>
     <div id="chanQuyen" class="hide"><p class="trong">Kho Content chỉ dành cho quản trị viên và quản lý.</p></div>
     <div id="noiDung" class="hide">
-      <div class="tab-hang" role="tablist">
-        <button class="btn" data-brand="house" aria-pressed="true">Mô House</button>
-        <button class="btn" data-brand="bedding" aria-pressed="false">Mô Bedding</button>
-        <a class="btn" href="index.html">← Về Hub</a>
+      <div class="thanh-dau">
+        <div class="tab-hang" role="tablist">
+          <button class="btn" data-brand="house" aria-pressed="true">Mô House</button>
+          <button class="btn" data-brand="bedding" aria-pressed="false">Mô Bedding</button>
+        </div>
+        <p class="muted">Bot viết <b>bản nháp</b> (08:00 Mô House, 20:00 Mô Bedding, hoặc ngay khi gõ /vietngay). Chọn phương án trên Telegram, đăng tay, rồi bấm “Đã đăng”. Hệ thống không tự đăng.</p>
       </div>
-      <p class="muted">Bài do bot viết mỗi ngày (08:00 Mô House, 20:00 Mô Bedding) là <b>bản nháp</b>: duyệt trên Telegram, đăng tay lên mạng xã hội, rồi bấm “Đã đăng” và dán link. Hệ thống không tự đăng.</p>
 
-      <section>
-        <h2>Hàng đợi chủ đề</h2>
-        <div id="themChuDe" class="hide">
-          <label>Chủ đề</label><input id="cdTopic" placeholder="Ví dụ: Buổi sáng ở hồ bơi Nhà Biển An Bàng">
-          <div class="hang">
-            <div><label>Định dạng (trống = mặc định)</label><input id="cdFormat" placeholder="caption IG / mô tả listing / blog…"></div>
-            <div><label>Ưu tiên (số lớn viết trước)</label><input id="cdPrio" type="number" value="0"></div>
+      <div class="bo-cuc">
+        <aside class="cot-trai khoi">
+          <div class="khoi-dau"><h2>Hàng đợi chủ đề<span class="dem" id="demCho"></span></h2></div>
+          <details id="themChuDe" class="hide">
+            <summary class="btn nho">＋ Thêm chủ đề</summary>
+            <label>Chủ đề</label><input id="cdTopic" placeholder="Ví dụ: Buổi sáng ở hồ bơi Nhà Biển">
+            <div class="hang">
+              <div><label>Định dạng</label><input id="cdFormat" placeholder="trống = mặc định"></div>
+              <div><label>Ưu tiên</label><input id="cdPrio" type="number" value="0" title="Số lớn viết trước"></div>
+            </div>
+            <label>Ghi chú cho người viết</label><input id="cdNotes">
+            <button class="btn chinh" id="cdLuu" style="margin-top:8px">Thêm vào hàng đợi</button>
+          </details>
+          <div id="hangDoi"><p class="muted">Đang tải…</p></div>
+        </aside>
+
+        <section class="cot-phai">
+          <div class="khoi-dau">
+            <h2>Bài viết<span class="dem" id="demBai"></span></h2>
+            <div class="loc">
+              <select id="locTT">
+                <option value="">Mọi trạng thái (trừ đã hủy)</option>
+                <option value="cho_duyet">Chờ duyệt</option><option value="can_viet_lai">Cần viết lại</option>
+                <option value="da_duyet">Đã duyệt</option><option value="da_dang">Đã đăng</option>
+                <option value="dang_viet">Đang viết</option><option value="cho_viet">Chờ viết</option><option value="huy">Đã hủy</option>
+              </select>
+              <input id="locTim" type="search" placeholder="Tìm theo chủ đề…">
+            </div>
           </div>
-          <label>Ghi chú cho người viết</label><input id="cdNotes">
-          <button class="btn chinh" id="cdLuu" style="margin-top:10px">Thêm chủ đề</button>
-        </div>
-        <div id="hangDoi"><p class="muted">Đang tải…</p></div>
-      </section>
-
-      <section>
-        <h2>Bài viết</h2>
-        <div class="loc">
-          <select id="locTT">
-            <option value="">Mọi trạng thái (trừ đã hủy)</option>
-            <option value="cho_duyet">Chờ duyệt</option><option value="can_viet_lai">Cần viết lại</option>
-            <option value="da_duyet">Đã duyệt</option><option value="da_dang">Đã đăng</option>
-            <option value="dang_viet">Đang viết</option><option value="cho_viet">Chờ viết</option><option value="huy">Đã hủy</option>
-          </select>
-          <input id="locTim" type="search" placeholder="Tìm theo chủ đề…">
-        </div>
-        <div id="dsBai" style="margin-top:12px"><p class="muted">Đang tải…</p></div>
-      </section>
+          <div id="dsBai"><p class="muted">Đang tải…</p></div>
+        </section>
+      </div>
     </div>
   </div>
 </div>
@@ -114,13 +158,14 @@ async function taiLai() {
 // ---------- Hàng đợi ----------
 function veHangDoi(ds) {
   const cho = ds.filter((t) => t.status === "cho").sort((a, b) => b.priority - a.priority || a.created_at.localeCompare(b.created_at));
+  $("#demCho").textContent = cho.length ? `· ${cho.length} chờ` : "";
   $("#hangDoi").innerHTML = cho.length ? cho.map((t, i) => `
     <div class="link-hang">
       <div class="ten">${i + 1}. ${esc(t.topic)}<small>${esc(t.format || "định dạng mặc định")} · ưu tiên ${t.priority}${t.notes ? " · " + esc(t.notes) : ""}</small></div>
       ${laAdmin ? `<button class="btn nho" data-len="${t.id}" title="Viết sớm hơn">↑</button>
         <button class="btn nho" data-sua="${t.id}">Sửa</button>
         <button class="btn chu" data-huy="${t.id}">Hủy</button>` : ""}
-    </div>`).join("") : `<p class="trong">Hàng đợi trống — khung giờ tới sẽ bỏ qua. Thêm chủ đề ở trên hoặc nhắn /chude cho bot.</p>`;
+    </div>`).join("") : `<p class="trong">Hàng đợi trống — khung giờ tới sẽ bỏ qua.<br>Thêm chủ đề ở trên hoặc nhắn /chude cho bot.</p>`;
   $("#hangDoi").onclick = async (e) => {
     const d = e.target.dataset, t = chuDe[d.len || d.sua || d.huy];
     if (!t) return;
@@ -153,6 +198,7 @@ async function veBai() {
   const tt = $("#locTT").value, tim = $("#locTim").value.trim().toLowerCase();
   const ds = bai.filter((p) => (tt ? p.status === tt : p.status !== "huy")
     && (!tim || (chuDe[p.topic_id]?.topic ?? "").toLowerCase().includes(tim)));
+  $("#demBai").textContent = ds.length ? `· ${ds.length}` : "";
   if (!ds.length) return ($("#dsBai").innerHTML = `<p class="trong">Chưa có bài nào.</p>`);
   // Nội dung phiên bản hiện tại
   const ids = ds.filter((p) => p.current_version > 0).map((p) => p.id);
@@ -164,17 +210,19 @@ async function veBai() {
   }
   // Đã chọn phương án thì "Sao chép" lấy đúng phương án đó
   const banChep = (p) => phuongAn[p.id] && p.chosen_option ? phuongAn[p.id][p.chosen_option - 1]?.body : hienTai[p.id];
-  const vePhuongAn = (p) => phuongAn[p.id].map((o) => `<div class="phuong-an${p.chosen_option === o.so ? " da-chon" : ""}">
-      <div class="meta"><b>Phương án ${o.so}</b>${o.phong_cach ? " · " + esc(o.phong_cach) : ""}${p.chosen_option === o.so ? " · ✅ đã chọn" : ""}
-        <button class="btn nho" data-chep-pa="${p.id}:${o.so}">Sao chép</button></div>
-      <pre>${esc(o.body)}</pre></div>`).join("");
+  // Đã chọn một phương án thì 2 phương án còn lại thu nhỏ lại để đỡ chiếm chỗ
+  const vePhuongAn = (p) => `<div class="pa-luoi">` + phuongAn[p.id].map((o) => `<div class="phuong-an${p.chosen_option === o.so ? " da-chon" : ""}">
+      <div class="pa-dau"><span><b>${o.so}</b>${o.phong_cach ? " · " + esc(o.phong_cach) : ""}${p.chosen_option === o.so ? " · ✅ đã chọn" : ""}</span>
+        <button class="btn chu" data-chep-pa="${p.id}:${o.so}">Sao chép</button></div>
+      <pre${p.chosen_option && p.chosen_option !== o.so ? ` style="max-height:90px"` : ""}>${esc(o.body)}</pre></div>`).join("") + `</div>`;
   $("#dsBai").innerHTML = ds.map((p) => {
     const t = chuDe[p.topic_id];
     return `<div class="bai">
-      <div><span class="nhan-tt">${TT[p.status]}</span>${p.engine === "du_phong" ? `<span class="nhan-tt du-phong">BẢN DỰ PHÒNG</span>` : ""}</div>
-      <b>${esc(t?.topic ?? "(chưa gắn chủ đề)")}</b>
-      <div class="meta">${esc(t?.format || "định dạng mặc định")} · ${new Date(p.created_at).toLocaleDateString("vi-VN")} · bản ${p.current_version}
-        ${p.engine ? " · " + (p.engine === "claude" ? "Claude" : "dự phòng") : ""}${p.published_url ? ` · <a href="${esc(p.published_url)}" target="_blank" rel="noopener">link bài đã đăng</a>` : ""}</div>
+      <div class="bai-dau">
+        <span class="nhan-tt ${p.status}">${TT[p.status]}</span>${p.engine === "du_phong" ? `<span class="nhan-tt du-phong">dự phòng</span>` : ""}
+        <b>${esc(t?.topic ?? "(chưa gắn chủ đề)")}</b>
+        <span class="meta">${esc(t?.format || "mặc định")} · ${new Date(p.created_at).toLocaleDateString("vi-VN")} · bản ${p.current_version}${p.published_url ? ` · <a href="${esc(p.published_url)}" target="_blank" rel="noopener">bài đã đăng</a>` : ""}</span>
+      </div>
       ${phuongAn[p.id] ? vePhuongAn(p) : hienTai[p.id] ? `<pre>${esc(hienTai[p.id])}</pre>` : ""}
       ${p.feedback_pending ? `<div class="meta">Yêu cầu sửa đang chờ: ${esc(p.feedback_pending)}</div>` : ""}
       <div class="hanh-dong">
