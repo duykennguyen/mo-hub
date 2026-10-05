@@ -64,7 +64,7 @@ end $$;
 -- đưa bản đạt về trạng thái xuất bản cho phần sau
 select nhap_tai_san_ban($j${"tai_san": [
   {"property": {"code": "TBA"},
-   "listing": {"slug": "test-dat", "title": "Nhà test đạt", "asking_price": 1000000000, "risks": ["Lối đi 2 m"],
+   "listing": {"slug": "test-dat", "title": "Nhà test đạt", "asking_price": 1000000000, "price_note": "≈ 10 triệu/m²", "risks": ["Lối đi 2 m"],
                "legal_public": {"hinh_thuc": "Sổ đỏ", "tinh_trang": "Đầy đủ"}, "xuat_ban": true},
    "private": {"legal_detail": "GCN TEST 000", "sale_mandate_confirmed": true}}]}$j$::jsonb);
 reset role;
@@ -79,8 +79,9 @@ declare ok boolean;
 begin
   if (select string_agg(slug, ',') from public_sale_listings where slug like 'test-%') is distinct from 'test-dat' then
     raise exception 'FAIL 2a: view công khai hiện sai danh sách (%)', (select string_agg(slug, ',') from public_sale_listings where slug like 'test-%'); end if;
-  if (select asking_price from public_sale_listings where slug = 'test-dat') <> 1000000000 then
-    raise exception 'FAIL 2b: view công khai không có giá chào'; end if;
+  -- Giá chào bán ẩn khỏi site công khai từ 05/10/2026 (khách bấm liên hệ)
+  if (select asking_price is not null or price_note is not null from public_sale_listings where slug = 'test-dat') then
+    raise exception 'FAIL 2b: view công khai lộ giá chào hoặc ghi chú giá'; end if;
   ok := false; begin perform 1 from sale_listings; exception when insufficient_privilege then ok := true; end;
   if not ok then raise exception 'FAIL 2c: anon đọc được bảng gốc sale_listings'; end if;
   ok := false; begin perform 1 from property_private; exception when insufficient_privilege then ok := true; end;
