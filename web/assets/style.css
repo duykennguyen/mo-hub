@@ -65,6 +65,8 @@ label.chon input[type="checkbox"] { width: 18px; height: 18px; flex: none; margi
 
 /* Hub */
 .o-luoi { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+/* Hàng ưu tiên: ít ô hơn nên giãn ra cho đầy hàng */
+.o-luoi.uu-tien { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 12px; }
 .o { background: var(--giay); border: 1px solid var(--vien); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
 .o h3 a { color: var(--muc); text-decoration: none; }
 .o h3 a:hover { color: var(--nau-dam); }

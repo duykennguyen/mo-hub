@@ -7,7 +7,7 @@
 <title>Mô Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css?v=2">
+<link rel="stylesheet" href="assets/style.css?v=3">
 </head>
 <body>
 <div id="gate" class="hide"></div>
@@ -29,6 +29,19 @@
     </section>
 
     <h2>Vận hành</h2>
+    <!-- Hai mục dùng hằng ngày, đưa lên hàng đầu cho rộng -->
+    <div class="o-luoi uu-tien">
+      <div class="o" id="oDatPhong">
+        <h3><a id="lichLink1" href="dat-phong.html">Lịch đặt phòng</a></h3>
+        <p class="muted">Mô House Calendar — lịch theo từng căn, hợp đồng, tiền cọc, lịch thu tiền, báo cáo.</p>
+        <div class="hanh-dong"><a class="btn" id="lichLink2" href="dat-phong.html">Mở lịch đặt phòng</a></div>
+      </div>
+      <div class="o hide" id="oContent">
+        <h3><a href="content.html">Kho Content</a></h3>
+        <p class="muted">Bài nháp Mô House (08:00) và Mô Bedding (20:00), hàng đợi chủ đề, bài đã duyệt và đã đăng.</p>
+        <div class="hanh-dong"><a class="btn" href="content.html">Mở Kho Content</a></div>
+      </div>
+    </div>
     <div class="o-luoi">
       <div class="o">
         <h3><a href="viec.html">Giao việc</a></h3>
@@ -36,20 +49,10 @@
         <div class="muted" id="soTre"></div>
         <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
       </div>
-      <div class="o" id="oDatPhong">
-        <h3><a id="lichLink1" href="dat-phong.html">Lịch đặt phòng</a></h3>
-        <p class="muted">Mô House Calendar — lịch theo từng căn, hợp đồng, tiền cọc, lịch thu tiền, báo cáo.</p>
-        <div class="hanh-dong"><a class="btn" id="lichLink2" href="dat-phong.html">Mở lịch đặt phòng</a></div>
-      </div>
       <div class="o hide" id="oNha">
         <h3><a href="nha.html">Quản lý nhà</a></h3>
         <p class="muted">Tên nhà và các căn, giá niêm yết, bí danh cho Thư kí, bật/tắt xuất bản ra trang khách.</p>
         <div class="hanh-dong"><a class="btn" href="nha.html">Mở quản lý nhà</a></div>
-      </div>
-      <div class="o hide" id="oContent">
-        <h3><a href="content.html">Kho Content</a></h3>
-        <p class="muted">Bài nháp Mô House (08:00) và Mô Bedding (20:00), hàng đợi chủ đề, bài đã duyệt và đã đăng.</p>
-        <div class="hanh-dong"><a class="btn" href="content.html">Mở Kho Content</a></div>
       </div>
       <div class="o hide" id="oBan">
         <h3><a href="ban.html">Tài sản bán</a></h3>
@@ -251,7 +254,7 @@ async function canXuLy(me, viec, today) {
   }
 
   $("#homNay").innerHTML = o.length ? o.join("")
-    : `<p class="muted">Hôm nay không có việc quá hạn, không có khách vào ra, không có khoản thu tới hạn.</p>`;
+    : `<p class="muted">Hôm nay không có gì cần xử lý.</p>`;
 }
 
 async function loadLinks(me) {
