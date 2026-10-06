@@ -7,12 +7,12 @@ window.MO_CONFIG = {
   // Lịch đặt phòng nay là site riêng (Mô House Calendar), dùng chung dự án Supabase
   // và chung phiên đăng nhập vì cùng origin duykennguyen.github.io.
   CALENDAR_URL: "https://duykennguyen.github.io/mo-house-calendar/",
-  // Site bán tài sản (Mô House · Chuyển nhượng), quản lý ở ban.html
+  // Site bán tài sản (Mô House - Nhà bán), quản lý ở ban.html
   SALE_SITE_URL: "https://duykennguyen.github.io/mo-house-ban/",
 
   PUBLIC_SITES: [
-    { name: "Mô House", url: "https://duykennguyen.github.io/mo-house/", note: "Danh mục nhà cho thuê — gửi khách, môi giới" },
+    { name: "Mô - Villa Hội An", url: "https://duykennguyen.github.io/mo-house/", note: "Danh mục nhà cho thuê — gửi khách, môi giới" },
     { name: "Mô Bedding", url: "https://duykennguyen.github.io/mo-bedding/", note: "Chăn ga gối eco — catalog cho khách" },
-    { name: "Mô House · Chuyển nhượng", url: "https://duykennguyen.github.io/mo-house-ban/", note: "Tài sản đang chào bán — gửi khách mua, môi giới" },
+    { name: "Mô House - Nhà bán", url: "https://duykennguyen.github.io/mo-house-ban/", note: "Tài sản đang chào bán — gửi khách mua, môi giới" },
   ],
 };
