@@ -10,6 +10,8 @@ import { laViec, parseBooking } from "./parse-booking.ts";
 import { docYDinh } from "./y-dinh.ts";
 import { ghiNhanTep, KHO, layTep, soBookingTrong, tepCuaTin, tepCungAlbum, xuLyAnh, type TepCho } from "./chung-tu.ts";
 import { ghepNguCanh, laYeuCauLamLai, soBookingTuTinBot } from "./ngu-canh.ts";
+import { docHanhDong } from "./hanh-dong.ts";
+import { xuLyHanhDong, xuLyNutHanhDong } from "./thao-tac.ts";
 import { chuanHoaGiongNoi } from "./giong-noi.ts";
 import { congDanhTinh, khopBiMat, moPhien, type Phien } from "./danh-tinh.ts";
 
@@ -81,6 +83,14 @@ và "ghi chú: …" (giữ nguyên văn).
 BỔ SUNG cho booking đã có:
   #12 sđt 0905123456 · #12 cọc 5tr · #12 khách Nhật, 3 người
   #12 tên Kim Min-ji · #12 ghi chú: đến muộn
+
+THAO TÁC BẰNG LỜI — tôi tìm booking theo tên khách, căn, ngày (không cần nhớ số #):
+  xóa đặt phòng của Duy ngày mai · khách Kim hủy rồi
+  dời Duy sang 12-14/10 · lùi khách Kim 2 ngày
+  Dominic gia hạn thêm 1 tháng · Liat ở thêm 2 đêm · gia hạn Liat đến hết 20/10
+  Liat trả phòng sớm ngày 12/10 · Liat đã trả phòng · Anna đã nhận phòng
+  chuyển Duy sang căn Thơm · ai đang ở Gừng · xem booking của Duy
+  Mọi thay đổi đều hỏi lại, bấm nút mới làm. Trùng tên thì tôi hiện nút chọn.
 
 HỎI NHANH (gõ lời hoặc lệnh):
   căn nào trống 10-15/10 → /trong 10/10 - 15/10
@@ -188,7 +198,7 @@ Deno.serve(async (req) => {
   }
   try {
     const ctx: Ctx = { db: phien.db, tg, HUB, LICH, taiFile };
-    if (cq) await xuLyNut(ctx, cq);
+    if (cq) await xuLyNut(phien, ctx, cq);
     else if (msg) await xuLyTinNhan(phien, ctx, msg, chat);
   } finally {
     await phien.dong();
@@ -197,8 +207,8 @@ Deno.serve(async (req) => {
 });
 
 // ---------------- Bấm nút ----------------
-async function xuLyNut(ctx: Ctx, cq: any) {
-  const ghiChu = await xuLyNutBooking(ctx, cq);
+async function xuLyNut(p: Phien, ctx: Ctx, cq: any) {
+  const ghiChu = (await xuLyNutHanhDong(ctx, cq, p.nguoi.vai_tro === "admin")) ?? await xuLyNutBooking(ctx, cq);
   // Nút việc (c:/x:/p:) trên các tin nhắn cũ của Thư kí: phần giao việc đã tắt
   await tg("answerCallbackQuery", {
     callback_query_id: cq.id,
@@ -250,13 +260,19 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
   // ---- Ngữ cảnh: trả lời tin cũ, hoặc "làm lại" ----
   if (!text.startsWith("/")) {
     // Trả lời tin của bot về booking #12 → coi như bổ sung cho #12 (trừ khi là câu hỏi/lệnh khác)
+    // Trả lời tin "Đã tạo booking #121" bằng "hủy", "gia hạn thêm 2 đêm"… → thao tác trên #121
+    const hdRep = idTuBot ? docHanhDong(text) : null;
+    if (idTuBot && hdRep) {
+      await xuLyHanhDong(ctx, chat, { ...hdRep, timKiem: `#${idTuBot} ${hdRep.timKiem}` }, p.nguoi.vai_tro === "admin");
+      return;
+    }
     if (idTuBot && !docYDinh(text) && !laYeuCauLamLai(text)) {
       await lenhSua(ctx, chat, idTuBot, text);
       return;
     }
     // Trả lời tin CỦA MÌNH (vd album ảnh hộ chiếu + nội dung booking) → làm lại với nội dung đó
     let cu: { text: string; teps: TepCho[] } | null = null;
-    if (rep && !rep.from?.is_bot && !docYDinh(text)) {
+    if (rep && !rep.from?.is_bot && !docYDinh(text) && !docHanhDong(text)) {
       const tepRep = layTep(rep);
       let teps: TepCho[] = await tepCuaTin(ctx, rep.message_id);
       if (!teps.length && tepRep && tepRep !== "khong_nhan") teps = [tepRep];
@@ -283,6 +299,8 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
   const cmd = lenhGoc.toLowerCase().replace(/@\w+$/, "");   // "/trong@ThuKiMo_bot" khi gõ trong nhóm
   const arg = args.join(" ");
   const so = (x?: string) => Number((x ?? "").replace(/^#/, ""));
+  // Thao tác trên booking đã có, nói bằng lời: "xóa đặt phòng của Duy ngày mai", "dời Kim sang 12/10"…
+  const hdong = !yd && !text.startsWith("/") ? docHanhDong(text) : null;
 
   if (cmd === "/start" || cmd === "/help")
     await tg("sendMessage", { chat_id: chat, text: `👤 ${p.nguoi.ten} (${VAI_TRO[p.nguoi.vai_tro] ?? p.nguoi.vai_tro})\n\n${HELP}` });
@@ -323,6 +341,7 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
   else if (["/viec", "/xong", "/xoa"].includes(cmd))
     await tg("sendMessage", { chat_id: chat, text: `Lễ tân không còn ghi/sửa việc. Việc cần làm xem trên Mô Hub:\n${HUB}/viec.html` });
   else if (cmd.startsWith("/")) await tg("sendMessage", { chat_id: chat, text: "Không hiểu lệnh này. Gõ /help." });
+  else if (hdong) await xuLyHanhDong(ctx, chat, hdong, p.nguoi.vai_tro === "admin");
   else if (await (async () => { await nhoTinCuoi(ctx, text, []); return xuLyDatPhong(ctx, chat, text); })()) {
     // tin nhắn đặt phòng đã được xử lý (kể cả khi bị từ chối vì không có quyền)
   }

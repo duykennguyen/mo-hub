@@ -32,7 +32,7 @@ const homNay = () => iso(vnToday());
 // Chặn sớm cho dễ hiểu; chặn thật vẫn là RLS (can_book) trong database.
 const KHONG_QUYEN_DAT = "🚫 Tài khoản của bạn không có quyền đặt phòng hay xem booking qua Lễ tân.\n" +
   "Chỉ quản trị viên và quản lý làm được việc này.";
-async function coQuyenDatPhong(ctx: Ctx, chat: number): Promise<boolean> {
+export async function coQuyenDatPhong(ctx: Ctx, chat: number): Promise<boolean> {
   const { data } = await ctx.db.rpc("can_book");
   if (data === true) return true;
   await ctx.tg("sendMessage", { chat_id: chat, text: KHONG_QUYEN_DAT });

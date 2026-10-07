@@ -11,7 +11,8 @@ const LUAT: [RegExp, YDinh["lenh"], (m: RegExpMatchArray) => string][] = [
   [/^(?:xem|chi tiết|chi tiet|thông tin)\s+(?:booking\s+)?#?(\d+)\s*$/i, "xem", (m) => m[1]],
   [/^(?:tìm|tim|tra cứu|tra cuu|tra|search)\s+(?:khách\s+)?([\s\S]+)$/i, "tim", (m) => m[1].trim()],
   [/^(?:(?:căn|phòng|nhà)\s+nào\s+)?(?:còn\s+)?(?:trống|còn phòng|còn căn|available|free)\b\s*(?:không\s*)?(?:ngày\s+|từ\s+)?([\s\S]*)$/i, "trong", (m) => m[1].trim()],
-  [/^(?:hôm nay|báo cáo|bao cao|lịch hôm nay|lich hom nay|ai đang ở|ai đến|ai đi|ai nhận phòng|ai trả phòng|tình hình)/i, "lich", () => ""],
+  // "ai đang ở" trơn = báo cáo hôm nay; "ai đang ở Gừng" (có tên căn) để hanh-dong.ts xử lý
+  [/^(?:hôm nay|báo cáo|bao cao|lịch hôm nay|lich hom nay|ai đang ở|ai đến|ai đi|ai nhận phòng|ai trả phòng|tình hình)(?:\s+(?:hôm nay|bây giờ|thế nào|sao|không|ạ|vậy))*\s*\??\s*$/i, "lich", () => ""],
   [/^(?:booking sắp tới|sắp tới|danh sách booking|ds booking|lịch sắp tới)/i, "dat", () => ""],
 ];
 
