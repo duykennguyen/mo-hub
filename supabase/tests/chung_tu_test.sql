@@ -95,5 +95,32 @@ do $$ begin
 end $$;
 reset role;
 
+-- ---------- Tự xóa sau 3 tháng (migration 20261007000002) ----------
+-- Người dùng (kể cả admin) không gọi được hàm liệt kê ảnh quá hạn
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}', true);
+do $$ declare ok boolean := false; begin
+  begin perform * from chung_tu_qua_han(); exception when insufficient_privilege then ok := true; end;
+  if not ok then raise exception 'FAIL 5a: người dùng gọi được chung_tu_qua_han()'; end if;
+end $$;
+reset role;
+
+insert into bookings (id, unit_id, start_date, end_date) overriding system value values
+  (990002, 'f1000000-0000-4000-8000-0000000000aa', '2026-01-01', '2026-02-01'),   -- đã trả phòng
+  (990003, 'f1000000-0000-4000-8000-0000000000aa', '2026-11-05', '2099-01-01');   -- thuê dài, còn ở (không chồng #990001)
+insert into booking_files (booking_id, path, created_at) values
+  (990002, 'cu-da-tra.jpg',  now() - interval '4 months'),   -- → xóa
+  (990002, 'moi-da-tra.jpg', now() - interval '1 month'),    -- chưa đủ 3 tháng → giữ
+  (990003, 'cu-dang-o.jpg',  now() - interval '4 months');   -- khách còn ở → giữ
+
+set local role service_role;
+do $$ begin
+  if (select array_agg(path order by path) from chung_tu_qua_han() )
+     is distinct from array['cu-da-tra.jpg'] then
+    raise exception 'FAIL 5b: danh sách ảnh quá hạn sai: %', (select array_agg(path) from chung_tu_qua_han());
+  end if;
+end $$;
+reset role;
+
 select 'chung_tu_test: QUA' as ket_qua;
 rollback;

@@ -54,7 +54,10 @@ Deno.test("đặt dài hạn đầy đủ thông tin", () => {
   assertEquals(r.row.end_date, "2026-12-01");
   assertEquals(r.row.term_type, "dai_han");
   assertEquals(r.row.rent_amount, 20000000);
-  assertEquals(r.row.deposit_amount, 5000000);
+  // Thuê tháng: "cọc" là cọc bảo đảm (hoàn lại), không phải tiền trả trước — quyết định 07/10/2026
+  assertEquals(r.row.security_deposit, 5000000);
+  assertEquals(r.row.deposit_amount, null);
+  assertEquals(r.cocLaBaoDam, true);
   assertEquals(r.row.status, "da_coc");
 });
 

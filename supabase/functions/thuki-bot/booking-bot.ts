@@ -68,21 +68,37 @@ function xemTruoc(n: BanNhap): string {
     : `💰 ${tien(r.rent_amount)}${r.term_type === "dai_han" ? "/tháng" : " tổng"}` +
       (n.giaDem && r.term_type === "ngan_han" ? ` (${tien(n.giaDem)} × ${dem} đêm)` : "");
   const tienPhu = [
-    r.deposit_amount ? `trả trước ${tien(r.deposit_amount)}` : "chưa trả trước",
-    r.security_deposit ? `cọc bảo đảm ${tien(r.security_deposit)}` : "",
+    r.deposit_amount ? `trả trước ${tien(r.deposit_amount)}` : n.daThu ? "" : "chưa trả trước",
+    r.security_deposit ? `🔒 cọc bảo đảm ${tien(r.security_deposit)}` : "",
   ].filter(Boolean).join(" · ");
+  const HT: Record<string, string> = { tien_mat: "tiền mặt", chuyen_khoan: "chuyển khoản" };
   return [
     `📋 Kiểm lại giúp tôi trước khi ghi:`,
     ``,
     `🏠 ${n.can?.property_name ?? ""} — ${n.can?.name ?? "?"}`,
     dongKhach(n.khach, n.tenKhach),
     `📅 ${dm(r.start_date)} → ${dm(r.end_date)} · ${doDai}`,
-    `${giaTien} · ${tienPhu}`,
+    `${giaTien}${tienPhu ? " · " + tienPhu : ""}`,
+    n.daThu ? `💵 Đã thu ${tien(n.daThu.so)}${n.daThu.hinhThuc ? " · " + HT[n.daThu.hinhThuc] : ""} · ngày ${dm(n.daThu.ngay ?? homNay())} → ghi vào lịch thu tiền` : null,
+    n.cocLaBaoDam ? `ℹ️ Thuê tháng nên "cọc" ghi là cọc bảo đảm (hoàn lại cuối hợp đồng). Nếu là tiền trả trước, bấm ✖ rồi nhắn lại "trả trước ${tien(r.security_deposit)}".` : null,
     `📌 ${TT[r.status]}${n.otaXacNhan ? " (đã thanh toán qua sàn)" : ""}${r.channel ? ` · ${KENH[r.channel]}` : ""}` +
       (r.broker_name ? ` · môi giới ${r.broker_name}` : "") +
       (r.commission_amount ? ` · hoa hồng ${tien(r.commission_amount)}` : ""),
     r.note ? `📝 ${r.note}` : null,
   ].filter((x) => x !== null).join("\n");
+}
+
+// "Tôi hiểu: căn Tía Tô · khách Dominic · 20tr/tháng" — để người nhắn biết chỉ cần bổ sung phần thiếu
+export function daHieu(n: BanNhap): string {
+  const r = n.row;
+  const phan = [
+    n.can ? `căn ${n.can.name}` : n.canUngVien.length ? `nhà ${n.canUngVien[0].property_name}` : null,
+    n.tenKhach ? `khách ${n.tenKhach}` : null,
+    r.start_date ? `từ ${dm(r.start_date)}` : null,
+    r.end_date ? `đến ${dm(r.end_date)}` : null,
+    r.rent_amount ? `giá ${tien(r.rent_amount)}` : null,
+  ].filter(Boolean);
+  return phan.length ? `Tôi hiểu: ${phan.join(" · ")}.\n` : "";
 }
 
 const nutXacNhan = (id: number) => ({
@@ -132,10 +148,20 @@ async function ghiBooking(ctx: Ctx, chat: number, nhap: NhapCoAnh) {
     return tg("sendMessage", { chat_id: chat, text: loi });
   }
 
+  let veThu = "";
+  if (nhap.daThu) {
+    const ngay = nhap.daThu.ngay ?? homNay();
+    const { error: eThu } = await db.from("payments").insert({
+      booking_id: data.id, kind: "tien_thue", period_label: "Thu ngày " + dm(ngay) + "/" + ngay.slice(0, 4),
+      amount_due: nhap.daThu.so, amount_paid: nhap.daThu.so, due_date: ngay, paid_date: ngay,
+      method: nhap.daThu.hinhThuc ?? "khac", note: "Ghi qua Lễ tân",
+    });
+    veThu = eThu ? `\n❌ Chưa ghi được khoản đã thu: ${eThu.message}` : `\n💵 Đã ghi khoản thu ${tien(nhap.daThu.so)} vào lịch thu tiền.`;
+  }
   const veAnh = nhap.anh?.length ? await ganAnhSauKhiTao(ctx, data.id, nhap.anh) : "";
   return tg("sendMessage", {
     chat_id: chat,
-    text: `✅ Đã tạo booking #${data.id}\n${xemTruoc(nhap).split("\n").slice(2).join("\n")}${veAnh}\n\n` +
+    text: `✅ Đã tạo booking #${data.id}\n${xemTruoc(nhap).split("\n").slice(2).filter((x) => !x.startsWith("ℹ️")).join("\n")}${veThu}${veAnh}\n\n` +
       `Bổ sung sau: #${data.id} sđt 0905… · #${data.id} cọc 5tr · #${data.id} ghi chú: …\n` +
       `Ảnh hộ chiếu / ghi chú: gửi ảnh kèm chú thích "#${data.id} passport"\n${LICH}`,
     disable_web_page_preview: true,
@@ -144,7 +170,7 @@ async function ghiBooking(ctx: Ctx, chat: number, nhap: NhapCoAnh) {
 
 // ---------------- Xử lý tin nhắn đặt phòng ----------------
 // tep: ảnh gửi kèm (chú thích của ảnh là nội dung booking) → lưu vào nháp, gắn sau khi bấm ✅
-export async function xuLyDatPhong(ctx: Ctx, chat: number, text: string, tep?: TepCho): Promise<boolean> {
+export async function xuLyDatPhong(ctx: Ctx, chat: number, text: string, teps: TepCho[] = []): Promise<boolean> {
   const { db, tg } = ctx;
   const cans = await layCan(db);
   if (!laTinDatPhong(text, cans)) return false;
@@ -156,13 +182,13 @@ export async function xuLyDatPhong(ctx: Ctx, chat: number, text: string, tep?: T
   }
 
   const nhap: NhapCoAnh = parseBooking(text, cans);
-  if (tep) nhap.anh = [tep];
+  if (teps.length) nhap.anh = teps;
 
   // Thiếu ngày → nói rõ thiếu gì, không đoán
   if (!nhap.row.start_date || !nhap.row.end_date) {
     await tg("sendMessage", {
       chat_id: chat,
-      text: `Tôi chưa rõ ${nhap.thieu.filter((x) => x !== "căn").join(" và ")}.\n\nNhắn lại theo mẫu:\n` +
+      text: `${daHieu(nhap)}Tôi chưa rõ ${nhap.thieu.filter((x) => x !== "căn").join(" và ")}.\n\nNhắn lại theo mẫu:\n` +
         `  đặt Gừng cho Anna từ 1/10 đến 1/12, 20tr, cọc 5tr\n` +
         `  Nhà Sen 10-15/10 anh Nam 0905123456 airbnb\n` +
         `  đặt Thơm 3 đêm từ 20/10, 800k/đêm`,
@@ -173,6 +199,9 @@ export async function xuLyDatPhong(ctx: Ctx, chat: number, text: string, tep?: T
   // Lưu nháp để bấm nút xác nhận mới ghi
   const { data: draft } = await db.from("bot_booking_drafts")
     .insert({ text, payload: nhap }).select("id").single();
+  // Album nhiều ảnh: các ảnh không chú thích tìm tới nháp này rồi gắn theo khi bấm ✅
+  for (const g of new Set(teps.map((t) => t.media_group_id).filter(Boolean)))
+    await db.from("bot_booking_drafts").insert({ text: "album", payload: { kieu: "album", media_group_id: g, nhap_id: draft.id } });
 
   // Chưa rõ căn → hỏi lại bằng nút
   if (!nhap.can) {
@@ -209,6 +238,7 @@ export async function xuLyNutBooking(ctx: Ctx, cq: any): Promise<string | null> 
 
   if (loai === "bx") {
     await db.from("bot_booking_drafts").delete().eq("id", a);
+    await db.from("bot_booking_drafts").delete().eq("payload->>kieu", "album").eq("payload->>nhap_id", a);
     await tg("editMessageText", { chat_id: chat, message_id: cq.message.message_id, text: "Đã bỏ, chưa ghi gì cả." });
     return "Đã bỏ";
   }

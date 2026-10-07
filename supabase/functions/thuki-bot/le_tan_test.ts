@@ -219,3 +219,56 @@ for (const [cau, lenh, thamSo] of Y_DINH) {
     if (thamSo !== undefined) assertEquals(y?.thamSo, thamSo);
   });
 }
+
+// ---------------- Tin nhắn thật 07/10/2026 bị hiểu sai (khách Dominic) ----------------
+const CAN2 = [...CAN, { id: "tiato", name: "Tía Tô", property_id: "camf", property_name: "CamF — CamFusion House", property_aliases: ["camf"], list_rent_month: 25000000 }];
+const DOMINIC = "Khách Dominic , ở căn tía tô 6/10 đến 6/11. Giá 20tr / tháng ( đã thu tiền mặt ngày 7/10) , đặt cọc tiền nhà 20tr ( tiền mặt,  7/10). Số công tơ điện đầu kì 11247";
+
+Deno.test("Dominic: 'đặt cọc' trong tin có căn + ngày vẫn là đặt phòng", () => {
+  assertEquals(laTinDatPhong(DOMINIC, CAN2, HOM_NAY), true);
+});
+
+Deno.test("Dominic: đọc đủ căn, khách, ngày, tiền thuê đã thu, cọc bảo đảm, công tơ", () => {
+  const r = parseBooking(DOMINIC, CAN2, HOM_NAY);
+  assertEquals(r.can?.id, "tiato");
+  assertEquals(r.tenKhach, "Dominic");
+  assertEquals([r.row.start_date, r.row.end_date, r.row.term_type], ["2026-10-06", "2026-11-06", "dai_han"]);
+  assertEquals(r.row.rent_amount, 20000000);
+  assertEquals(r.daThu, { so: 20000000, ngay: "2026-10-07", hinhThuc: "tien_mat" });
+  assertEquals([r.row.security_deposit, r.row.security_deposit_status, r.cocLaBaoDam], [20000000, "dang_giu", true]);
+  assertEquals(r.row.deposit_amount, null);
+  assertEquals(r.row.status, "da_coc");
+  assertEquals(r.row.note, "công tơ điện đầu kỳ: 11247");
+});
+
+Deno.test("ngày trong ngoặc / ngày thu tiền không bị lấy làm ngày trả phòng", () => {
+  const r = doc("đặt Gừng cho Kim từ 10/10 3 tháng, giá 20tr (đã ck 9/10)");
+  assertEquals([r.row.start_date, r.row.end_date], ["2026-10-10", "2027-01-10"]);
+  assertEquals(r.daThu?.hinhThuc, "chuyen_khoan");
+});
+
+Deno.test("thuê ĐÊM: 'cọc' là tiền giữ phòng (trả trước)", () => {
+  const r = doc("đặt Gừng 10/10 - 12/10 anh Nam, cọc 500k");
+  assertEquals([r.row.deposit_amount, r.row.security_deposit, r.cocLaBaoDam], [500000, null, false]);
+});
+
+Deno.test("ngày viết kiểu 6.10 - 6.11, 6 tháng 10, từ mai", () => {
+  assertEquals(chuanHoaKhoangNgay("6.10 - 6.11", HOM_NAY), "6/10 - 6/11");
+  assertEquals(chuanHoaKhoangNgay("từ 6.10 đến 6.11", HOM_NAY), "từ 6/10 đến 6/11");
+  assertEquals(chuanHoaKhoangNgay("giá 6.5tr", HOM_NAY), "giá 6.5tr");                 // tiền giữ nguyên
+  assertEquals(chuanHoaKhoangNgay("6 tháng 10 đến 6 tháng 11", HOM_NAY), "6/10 đến 6/11");
+  assertEquals(chuanHoaKhoangNgay("thuê 3 tháng 20tr", HOM_NAY), "thuê 3 tháng 20tr");  // độ dài + giá
+  assertEquals(chuanHoaKhoangNgay("3 tháng 2 người", HOM_NAY), "3 tháng 2 người");
+  assertEquals(chuanHoaKhoangNgay("nhận phòng từ mai", HOM_NAY), "nhận phòng từ 8/10");
+});
+
+Deno.test("tên khách: 'khách là X', 'tên khách: X'", () => {
+  assertEquals(doc("book Gừng 10/10 - 12/10 khách là Peter").tenKhach, "Peter");
+  assertEquals(doc("book Gừng 10/10 - 12/10, tên khách: Lê Hoa").tenKhach, "Lê Hoa");
+});
+
+Deno.test("công tơ nước, không lẫn với số điện thoại", () => {
+  const r = doc("đặt Gừng 10/10 - 12/10 anh Nam, chỉ số nước 345, số điện thoại 0905123456");
+  assertEquals(r.row.note, "công tơ nước: 345");
+  assertEquals(r.khach.sdt, "0905123456");
+});

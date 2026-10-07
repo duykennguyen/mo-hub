@@ -46,6 +46,8 @@ export type BanNhap = {
   khach: ThongTinKhach;
   giaDem: number | null;      // giá một đêm (nếu nhắn "800k/đêm") — tổng tiền đã tính vào rent_amount
   otaXacNhan: boolean;        // kênh OTA → coi như đã thanh toán qua sàn
+  daThu: ThuTien | null;      // tiền thuê đã thu → tạo một dòng "đã thu" trong lịch thu tiền
+  cocLaBaoDam: boolean;       // chữ "cọc" được hiểu là cọc bảo đảm (thuê tháng) — để bản xem trước nói rõ
   row: DongBooking;
 };
 
@@ -75,7 +77,7 @@ const DAU_HIEU_MO = [
 ];
 
 // Động từ công việc xuất hiện ở BẤT KỲ đâu trong câu — dùng cho luật 3
-const CO_VIEC = /(dọn|lau|giặt|thay ga|thay khăn|sửa|kiểm tra|gọi thợ|lắp|bảo trì|vệ sinh|hút bụi|sơn lại|thu tiền)/i;
+const CO_VIEC = /(dọn|lau|giặt|thay ga|thay khăn|sửa|kiểm tra|gọi thợ|lắp|bảo trì|vệ sinh|hút bụi|sơn lại)/i;
 
 const COC_THOI_GIAN = /\d{1,2}\s*[\/-]\s*\d{1,2}|\d{1,3}\s*(đêm|dem|ngày|ngay|hôm|tuần|tuan|thá?ng|nights?)(?![\p{L}])|hôm nay|ngày mai|ngày mốt|ngày kia|cuối tuần|tuần sau/iu;
 
@@ -109,11 +111,13 @@ export function laLenhDatPhong(raw: string): boolean {
 // ("Gừng 1/10 - 5/10 Anna 0905123456"). Câu mở đầu bằng động từ việc vẫn bị loại.
 export function laTinDatPhong(raw: string, units: Can[], today = vnToday()): boolean {
   if (laLenhDatPhong(raw)) return true;
-  if (laViec(raw) || CO_VIEC.test(raw)) return false;
+  // Chỉ loại câu MỞ ĐẦU bằng động từ việc. "đặt cọc tiền nhà 20tr" trong tin có căn + ngày
+  // là tiền cọc của khách, không phải việc (lỗi 07/10/2026: khách Dominic bị bỏ qua vì chữ "đặt cọc").
+  if (DONG_TU_VIEC.test(raw.toLowerCase().trim()) || CO_VIEC.test(raw)) return false;
   const { con } = tachLienHe(raw);
   const { can, ungVien } = timCan(con, units);
   if (!can && !ungVien.length) return false;
-  return timNgay(chuanHoaKhoangNgay(con), today).length > 0 || thangTron(con, today) !== null;
+  return timNgay(chuanHoaKhoangNgay(con, today), today).length > 0 || thangTron(con, today) !== null;
 }
 
 // ---------------- Liên hệ: số điện thoại, email ----------------
@@ -149,11 +153,32 @@ const THANG_TOI_DA = 31;
 const laNgayHopLe = (d: number, m: number) => d >= 1 && d <= THANG_TOI_DA && m >= 1 && m <= 12;
 
 // "10-15/10", "10 đến 15/10", "10→15/10" → "10/10 - 15/10"
-export function chuanHoaKhoangNgay(raw: string): string {
-  return raw.replace(
+// "6.10 - 6.11" → "6/10 - 6/11" · "6 tháng 10" → "6/10" · "từ mai" → ngày mai
+export function chuanHoaKhoangNgay(raw: string, today = vnToday()): string {
+  const TIEN_SAU = "(?![\\d.,]|\\s*(?:tr|k|củ|cu|triệu|nghìn|ngàn|đ)(?![\\p{L}]))";
+  const t = raw
+    // dấu chấm làm phân cách ngày: chỉ khi là một khoảng "d.m - d.m" hoặc đứng sau từ/đến/ngày
+    .replace(new RegExp(`(?<![\\d.])(\\d{1,2})\\.(\\d{1,2})\\s*(-|–|đến|tới|->|→)\\s*(\\d{1,2})\\.(\\d{1,2})${TIEN_SAU}`, "giu"),
+      (_m, a, b, n, c, d) => `${a}/${b} ${n} ${c}/${d}`)
+    .replace(new RegExp(`(?<=(?:từ|đến|tới|ngày|vào|ra|hết)\\s+)(\\d{1,2})\\.(\\d{1,2})${TIEN_SAU}`, "giu"), "$1/$2")
+    // "6 tháng 10" (không phải "3 tháng 20tr")
+    .replace(new RegExp(`(?<![\\d\\/])(\\d{1,2})\\s+tháng\\s+(\\d{1,2})${TIEN_SAU}(?!\\s*(?:đêm|ngày|tuần|người|khách|pax|nl|bé|trẻ|em))`, "giu"), "$1/$2")
+    // "từ mai", "nhận phòng mai" (bộ đọc giọng nói chỉ đổi "ngày mai")
+    .replace(/(từ|vào|nhận phòng|check[\s-]?in)\s+mai(?![\p{L}])/giu, (_m, k) => {
+      const d = new Date(today.getTime() + 86400e3);
+      return `${k} ${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+    });
+  return t.replace(
     /(?<![\d\/])(\d{1,2})\s*(?:-|–|->|→|~|đến|tới|den|toi)\s*(\d{1,2})\s*\/\s*(\d{1,2})((?:\s*\/\s*\d{2,4})?)(?![\d])/gi,
     (_m, a, b, thang, nam) => `${a}/${thang}${nam.replace(/\s/g, "")} - ${b}/${thang}${nam.replace(/\s/g, "")}`,
   );
+}
+
+// Ngày nằm trong ngoặc hoặc sau "đã thu / đã ck" là ngày THU TIỀN, không phải ngày ở:
+// "6/10 đến 6/11 (đã thu tiền mặt ngày 7/10)" → chỉ 6/10 và 6/11 là ngày ở
+export function boNgayPhu(raw: string): string {
+  return raw.replace(/\([^)]*\)/g, " ")
+    .replace(/(?:đã\s*(?:thu|trả|nhận|ck|chuyển|thanh toán)|thu\s+ngày|ck\s+ngày|chuyển\s+ngày)[^,.;]*/gi, " ");
 }
 
 // Tìm mọi mốc ngày dạng d/m hoặc d/m/yyyy trong câu, theo đúng thứ tự xuất hiện.
@@ -222,36 +247,55 @@ const RE_TIEN = /(\d+(?:tr|triệu|trieu)\d{1,3})(?![\d\p{L}])|(\d+(?:[.,]\d+)?)
 
 const KW_HOA_HONG = /(hoa hồng|hoa hong|\bhh\b|commission|\bcom\b)/i;
 const KW_COC_BAO_DAM = /(bảo đảm|đảm bảo|bao dam|dam bao|cọc an ninh|cọc giữ đồ|cọc hư hỏng|cọc tài sản|security)/i;
-const KW_TRA_TRUOC = /(cọc|coc|trả trước|tra truoc|đặt trước|dat truoc|ck trước|chuyển khoản trước|chuyển trước|đã ck|đã chuyển|ứng trước|thanh toán trước)/i;
+const KW_TRA_TRUOC = /(trả trước|tra truoc|đặt trước|dat truoc|ck trước|chuyển khoản trước|chuyển trước|đã ck|đã chuyển|ứng trước|thanh toán trước)/i;
+// "cọc" trơn: thuê THÁNG thì là cọc bảo đảm (hoàn lại cuối kỳ), thuê ĐÊM thì là tiền giữ phòng (trả trước)
+const KW_COC = /(cọc|coc)/i;
+const KW_DA_THU = /(đã\s*(?:thu|trả|nhận|ck|chuyển|thanh toán|tt)|thu rồi|trả rồi|nhận rồi|ck rồi)/i;
+
+export type ThuTien = { so: number; ngay: string | null; hinhThuc: "tien_mat" | "chuyen_khoan" | null };
+export const hinhThucThu = (t: string): ThuTien["hinhThuc"] =>
+  /tiền mặt|tien mat|\btm\b|cash/i.test(t) ? "tien_mat" : /chuyển khoản|chuyen khoan|\bck\b|bank/i.test(t) ? "chuyen_khoan" : null;
 
 export type Tien = {
   gia: number | null;         // giá thuê (dài hạn: /tháng · ngắn hạn: tổng)
   giaDem: number | null;      // giá một đêm
-  coc: number | null;         // trả trước (doanh thu)
+  coc: number | null;         // "cọc" trơn — parseBooking quyết theo kiểu thuê
+  traTruoc: number | null;    // trả trước rõ ràng (doanh thu)
   cocBaoDam: number | null;   // cọc bảo đảm (hoàn lại)
   hoaHong: number | null;
+  daThu: ThuTien | null;      // tiền thuê đã thu ("giá 20tr (đã thu tiền mặt 7/10)")
 };
 
-export function timTien(raw: string): Tien {
-  const out: Tien = { gia: null, giaDem: null, coc: null, cocBaoDam: null, hoaHong: null };
+export function timTien(raw: string, today = vnToday()): Tien {
+  const out: Tien = { gia: null, giaDem: null, coc: null, traTruoc: null, cocBaoDam: null, hoaHong: null, daThu: null };
   const t = raw.toLowerCase();
-  let m: RegExpExecArray | null;
-  let cuoi = 0;
   RE_TIEN.lastIndex = 0;
-  while ((m = RE_TIEN.exec(t))) {
+  const ds = [...t.matchAll(RE_TIEN)];
+  let cuoi = 0;
+  for (let i = 0; i < ds.length; i++) {
+    const m = ds[i];
     const soTien = doiTien(m[0]);
     if (!soTien) continue;
     // Chỉ nhìn đoạn từ khoản tiền trước tới khoản này (tối đa 30 ký tự):
     // "cọc 5tr giá 20tr" — chữ "cọc" thuộc về 5tr, không thuộc về 20tr
-    const truoc = t.slice(Math.max(cuoi, m.index - 30), m.index);
-    const sau = t.slice(m.index + m[0].length, m.index + m[0].length + 14);
-    cuoi = m.index + m[0].length;
+    const truoc = t.slice(Math.max(cuoi, m.index! - 30), m.index);
+    const het = m.index! + m[0].length;
+    const sau = t.slice(het, het + 14);
+    // Phần câu đi theo khoản này, tới khoản tiền kế tiếp: "( đã thu tiền mặt ngày 7/10)"
+    const sauCau = t.slice(het, Math.min(ds[i + 1]?.index ?? t.length, het + 60));
+    cuoi = het;
     if (KW_HOA_HONG.test(truoc)) out.hoaHong = soTien;
     else if (KW_COC_BAO_DAM.test(truoc)) out.cocBaoDam = soTien;
-    else if (KW_TRA_TRUOC.test(truoc)) out.coc = soTien;
+    else if (KW_TRA_TRUOC.test(truoc)) out.traTruoc = soTien;
+    else if (KW_COC.test(truoc)) out.coc = soTien;
     else if (/^\s*(?:\/|một|1|mỗi|per|a)\s*(?:đêm|dem|ngày|ngay|night)/.test(sau) ||
              /(?:mỗi|một|1)\s*(?:đêm|ngày)\s*(?:giá\s*)?$/.test(truoc)) out.giaDem ??= soTien;
-    else if (out.gia === null) out.gia = soTien;
+    else if (out.gia === null) {
+      out.gia = soTien;
+      if (KW_DA_THU.test(sauCau) || /đã thu (?:tiền )?(?:nhà|phòng|tháng)/.test(truoc)) {
+        out.daThu = { so: soTien, ngay: timNgay(sauCau, today)[0] ?? null, hinhThuc: hinhThucThu(sauCau) };
+      }
+    }
   }
   return out;
 }
@@ -352,6 +396,18 @@ export function timYeuCau(raw: string): string[] {
   return YEU_CAU.filter(([re]) => re.test(raw)).map(([, v]) => v);
 }
 
+// "số công tơ điện đầu kì 11247", "chỉ số nước 345" → ghi chú (và không bị đọc thành tiền)
+const RE_CONG_TO = /(?:số\s*)?(?:công tơ|cong to|đồng hồ|dong ho|chỉ số|chi so|số)\s*(điện|nước|dien|nuoc)(?!\s*thoại)(?:\s*(đầu|cuối|dau|cuoi)\s*(?:kì|kỳ|ki|ky))?\s*(?:là|:)?\s*(\d{1,7})(?![\d.,]*\s*(?:tr|k|củ|triệu|đ)(?![\p{L}]))/giu;
+export function tachCongTo(raw: string): { ghi: string[]; con: string } {
+  const ghi: string[] = [];
+  const con = raw.replace(RE_CONG_TO, (_m, loai, ky, so) => {
+    const l = /n/.test(loai[0]) || /nước|nuoc/i.test(loai) ? "nước" : "điện";
+    ghi.push(`công tơ ${l}${ky ? (/cu/i.test(ky) ? " cuối kỳ" : " đầu kỳ") : ""}: ${so}`);
+    return " ";
+  });
+  return { ghi, con };
+}
+
 // "ghi chú: khách ăn chay" → phần sau chữ ghi chú là ghi chú nguyên văn, không đọc tiền/ngày trong đó
 const RE_GHI_CHU = /(?:^|[\s,.;])(?:ghi chú|ghi chu|note|lưu ý|luu y|gc)\s*[:\-]\s*([\s\S]+)$/i;
 export function tachGhiChu(raw: string): { chinh: string; ghiChu: string | null } {
@@ -363,10 +419,10 @@ export function tachGhiChu(raw: string): { chinh: string; ghiChu: string | null 
 // ---------------- Tên khách ----------------
 // Lấy cụm sau "cho" / "tên" / "khách" hoặc xưng hô + tên viết hoa, dừng lại khi gặp số, ngày, từ khóa khác.
 // Từ dừng CÓ DẤU — không đưa dạng không dấu vào đây, kẻo "gia đình Lê" bị cắt còn rỗng
-const DUNG = /^(từ|đến|tới|ngày|giá|cọc|thuê|trong|lúc|vào|qua|check|sđt|đt|số|phone|tel|email|mail|bên|kênh|đã|chưa|giữ|hoa|bay|người|quốc|pax|ở|nhận|trả|giờ|khách|book|đặt|ghi|lưu|note|tầm|khoảng|đón|cần|muốn|có|không|thêm|và|với|cọc|tháng|đêm|tuần|miễn|free|môi|sale|nhà|căn|phòng|tại|hôm|mai|chuyển|ck|thanh)$/i;
+const DUNG = /^(từ|đến|tới|ngày|giá|cọc|thuê|trong|lúc|vào|qua|check|sđt|đt|số|phone|tel|email|mail|bên|kênh|đã|chưa|giữ|bay|người|quốc|pax|ở|nhận|trả|giờ|khách|book|đặt|ghi|lưu|note|tầm|khoảng|đón|cần|muốn|có|không|thêm|và|với|cọc|tháng|đêm|tuần|miễn|free|môi|sale|nhà|căn|phòng|tại|hôm|mai|chuyển|ck|thanh)$/i;
 const DUNG_KHONG_DAU = new Set([
   "tu", "den", "toi", "ngay", "thue", "coc", "check", "airbnb", "booking", "agoda", "bkk", "bnb", "sdt", "dt",
-  "so", "phone", "tel", "email", "mail", "qua", "ben", "kenh", "da", "chua", "giu", "hoa", "gio", "pax", "nguoi",
+  "so", "phone", "tel", "email", "mail", "qua", "ben", "kenh", "da", "chua", "giu", "gio", "pax", "nguoi",
   "quoc", "khach", "book", "dat", "note", "free", "nha", "can", "phong", "va", "voi", "ck", "traveloka", "expedia",
 ]);
 // Sau "khách" thường là động từ chứ không phải tên: "khách book Củ Sả", "khách thuê 3 tháng"
@@ -378,9 +434,12 @@ const SAU_KHACH_KHONG_PHAI_TEN = new Set([
 
 function catTen(phan: string): string | null {
   const tu: string[] = [];
-  for (const w of phan.split(/\s+/)) {
+  const cacTu = phan.split(/\s+/);
+  for (const [i, w] of cacTu.entries()) {
     const sach = w.replace(/[,.;:!?)]+$/, "");
     if (!sach) break;
+    // "Hoa" là tên người phổ biến — chỉ dừng khi là cụm "hoa hồng"
+    if (/^hoa$/i.test(sach) && /^(hồng|hong)/i.test(cacTu[i + 1] ?? "")) break;
     if (/\d|@/.test(sach) || /^[/\-,.(]/.test(sach)) break;
     if (DUNG.test(sach)) break;
     // Từ dừng không dấu chỉ áp cho chữ vốn không dấu, để không cắt nhầm tên có dấu
@@ -403,7 +462,7 @@ export function timTenKhach(raw: string, tenCan?: string | null): string | null 
   if (mCho) { const t = catTen(mCho[1]); if (t) return t; }
 
   // 2) "tên Anna", "khách tên là Kim"
-  const mTen = raw.match(/(?:^|\s)tên\s+(?:là\s+|:\s*)?(.{2,60})/i);
+  const mTen = raw.match(/(?:^|\s)tên\s*(?:khách\s*)?(?:là\s+|:\s*|\s)(.{2,60})/i);
   if (mTen) { const t = catTen(mTen[1]); if (t) return t; }
 
   // 3) Xưng hô + tên viết hoa ở bất cứ đâu: "anh Nam", "chị Lan Anh", "Mr John"
@@ -414,7 +473,7 @@ export function timTenKhach(raw: string, tenCan?: string | null): string | null 
   }
 
   // 4) Sau chữ "khách", nhưng bỏ qua nếu ngay sau là động từ ("khách book …") hay quốc tịch ("khách Hàn")
-  const mKhach = raw.match(/(?:^|\s)(?:khách|khach)\s+(.{2,60})/i);
+  const mKhach = raw.match(/(?:^|\s)(?:khách|khach)\s+(?:là\s+|:\s*)?(.{2,60})/i);
   if (mKhach) {
     const tuDau = mKhach[1].split(/\s+/)[0].replace(/[,.;:]+$/, "").toLowerCase();
     if (!SAU_KHACH_KHONG_PHAI_TEN.has(tuDau) && !LA_TU_QUOC_TICH.has(tuDau)) {
@@ -489,11 +548,12 @@ export type ChiTiet = {
   ghiChu: string | null;                     // ghép: số khách · giờ đến · yêu cầu · ghi chú
 };
 
-export function docChiTiet(raw: string, tenCan?: string | null): ChiTiet {
+export function docChiTiet(raw: string, tenCan?: string | null, today = vnToday()): ChiTiet {
   const { chinh, ghiChu } = tachGhiChu(raw);
   const { sdt, email, con: sachLienHe } = tachLienHe(chinh);
-  const moiGioi = sachLienHe.match(RE_MOI_GIOI)?.[1] ?? null;
-  const con = moiGioi ? sachLienHe.replace(moiGioi, " ") : sachLienHe;
+  const congTo = tachCongTo(sachLienHe);
+  const moiGioi = congTo.con.match(RE_MOI_GIOI)?.[1] ?? null;
+  const con = moiGioi ? congTo.con.replace(moiGioi, " ") : congTo.con;
   const t = con.toLowerCase();
   const { kenh, tenKenh } = timKenh(con);
   const mienPhi = /miễn phí|mien phi|\bfree\b|không tính tiền|khong tinh tien|khách mời|ở nhờ|0 đồng/i.test(t);
@@ -507,12 +567,13 @@ export function docChiTiet(raw: string, tenCan?: string | null): ChiTiet {
     gioDen ? `giờ đến ~${gioDen}` : null,
     ...timYeuCau(con),
     tenKenh ? `kênh ${tenKenh}` : null,
+    ...congTo.ghi,
     ghiChu,
   ].filter(Boolean) as string[];
 
   return {
     khach: { ten: timTenKhach(con, tenCan), sdt, email, quoc_tich: timQuocTich(con) },
-    tien: timTien(con),
+    tien: timTien(con, today),
     kenh, tenKenh, moiGioi, trangThai, mienPhi,
     ghiChu: phan.length ? phan.join(" · ") : null,
   };
@@ -522,10 +583,11 @@ export function docChiTiet(raw: string, tenCan?: string | null): ChiTiet {
 export function parseBooking(raw: string, units: Can[], today = vnToday()): BanNhap {
   const { chinh } = tachGhiChu(raw);
   const { con: sach } = tachLienHe(chinh);
-  const chuan = chuanHoaKhoangNgay(sach);
+  const chuan = chuanHoaKhoangNgay(sach, today);
   const { can, ungVien } = timCan(sach, units);
-  const ct = docChiTiet(raw, null);
-  const ngay = timNgay(chuan, today);
+  const ct = docChiTiet(raw, null, today);
+  // Ngày ở: bỏ ngày trong ngoặc và ngày thu tiền ("đã thu tiền mặt ngày 7/10")
+  const ngay = timNgay(boNgayPhu(chuan), today);
 
   let batDau: string | null = ngay[0] ?? null;
   let ketThuc: string | null = ngay[1] ?? null;
@@ -533,7 +595,7 @@ export function parseBooking(raw: string, units: Can[], today = vnToday()): BanN
     const thang = thangTron(sach, today);
     if (thang) [batDau, ketThuc] = thang;
   }
-  if (batDau && !ketThuc) ketThuc = themKhoang(batDau, chuan);
+  if (batDau && !ketThuc) ketThuc = themKhoang(batDau, boNgayPhu(chuan));
   // Ngày trả trước ngày vào → hiểu là sang năm sau
   if (batDau && ketThuc && ketThuc <= batDau) {
     const d = new Date(ketThuc + "T00:00:00Z");
@@ -544,7 +606,11 @@ export function parseBooking(raw: string, units: Can[], today = vnToday()): BanN
   const daiHan = /thá?ng(?![\p{L}])/iu.test(sach) && !ct.tien.giaDem ? true : soDem >= 28;
 
   // Tiền thuê: "800k/đêm" × số đêm; dài hạn không ghi giá thì lấy giá niêm yết của căn
-  const { gia, giaDem, coc, cocBaoDam, hoaHong } = ct.tien;
+  const { gia, giaDem, coc, traTruoc, hoaHong } = ct.tien;
+  // "Cọc" trơn: thuê tháng → cọc bảo đảm (hoàn lại cuối hợp đồng); thuê đêm → tiền giữ phòng (trả trước)
+  const cocLaBaoDam = coc !== null && daiHan && ct.tien.cocBaoDam === null;
+  const cocBaoDam = ct.tien.cocBaoDam ?? (daiHan ? coc : null);
+  const traTruocCuoi = traTruoc ?? (daiHan ? null : coc);
   let tienThue = gia ?? (giaDem && soDem && !daiHan ? giaDem * soDem : null);
   if (tienThue === null && daiHan && !ct.mienPhi) tienThue = can?.list_rent_month ?? null;
   if (ct.mienPhi) tienThue = 0;
@@ -552,7 +618,8 @@ export function parseBooking(raw: string, units: Can[], today = vnToday()): BanN
   // Kênh OTA (Airbnb, Booking, Agoda) thì khách đã thanh toán qua sàn → coi như đã chốt,
   // trừ khi tin nhắn nói rõ "giữ chỗ / chưa cọc"
   const otaXacNhan = !!ct.kenh && LA_OTA.has(ct.kenh) && ct.trangThai !== "giu_cho";
-  const status = ct.trangThai ?? (coc || otaXacNhan || ct.mienPhi ? "da_coc" : "giu_cho");
+  const daNhanTien = !!(traTruocCuoi || cocBaoDam || ct.tien.daThu);
+  const status = ct.trangThai ?? (daNhanTien || otaXacNhan || ct.mienPhi ? "da_coc" : "giu_cho");
 
   const thieu: string[] = [];
   if (!can) thieu.push("căn");
@@ -570,14 +637,16 @@ export function parseBooking(raw: string, units: Can[], today = vnToday()): BanN
     khach,
     giaDem,
     otaXacNhan,
+    daThu: ct.tien.daThu,
+    cocLaBaoDam,
     row: {
       unit_id: can?.id ?? null,
       start_date: batDau,
       end_date: ketThuc,
       term_type: daiHan ? "dai_han" : "ngan_han",
       rent_amount: tienThue,
-      deposit_amount: coc,
-      deposit_status: coc ? "da_nhan" : "chua_nhan",
+      deposit_amount: traTruocCuoi,
+      deposit_status: traTruocCuoi ? "da_nhan" : "chua_nhan",
       security_deposit: cocBaoDam,
       security_deposit_status: cocBaoDam ? "dang_giu" : null,
       is_free: ct.mienPhi,

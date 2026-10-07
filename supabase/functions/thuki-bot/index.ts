@@ -4,11 +4,12 @@
 // chính người nhắn nên RLS áp dụng như trên web. Webhook bảo vệ bằng TELEGRAM_WEBHOOK_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  guiBaoCao, lenhDat, lenhDoiNgay, lenhHuy, lenhSua, lenhTim, lenhTrong, lenhXem, xuLyDatPhong, xuLyNutBooking, type Ctx,
+  daHieu, guiBaoCao, layCan, lenhDat, lenhDoiNgay, lenhHuy, lenhSua, lenhTim, lenhTrong, lenhXem, xuLyDatPhong, xuLyNutBooking, type Ctx,
 } from "./booking-bot.ts";
-import { laViec } from "./parse-booking.ts";
+import { laViec, parseBooking } from "./parse-booking.ts";
 import { docYDinh } from "./y-dinh.ts";
-import { layTep, soBookingTrong, xuLyAnh } from "./chung-tu.ts";
+import { ghiNhanTep, KHO, layTep, soBookingTrong, tepCuaTin, tepCungAlbum, xuLyAnh, type TepCho } from "./chung-tu.ts";
+import { ghepNguCanh, laYeuCauLamLai, soBookingTuTinBot } from "./ngu-canh.ts";
 import { chuanHoaGiongNoi } from "./giong-noi.ts";
 import { congDanhTinh, khopBiMat, moPhien, type Phien } from "./danh-tinh.ts";
 
@@ -95,7 +96,11 @@ HỎI NHANH (gõ lời hoặc lệnh):
   #12 passport C1234567   → lưu vào booking #12, ghi số hộ chiếu vào hồ sơ khách
   #12 ghi chú             → ảnh ghi chú của booking #12
   Không ghi số booking thì tôi hỏi lại bằng nút. Gửi nhiều ảnh một lượt: chú thích ở ảnh đầu là đủ.
-  Ảnh chỉ quản trị và quản lý xem được, hiện trong phần Ghi chú của booking trên lịch.
+  Ảnh chỉ quản trị và quản lý xem được, hiện trong phần Ghi chú của booking trên lịch,
+  tự xóa khi đã lưu 3 tháng và khách đã trả phòng.
+
+NHẮN BỔ SUNG / LÀM LẠI: bấm giữ tin cũ → Trả lời (Reply), nhắn thêm thông tin hoặc "làm lại".
+  Trả lời tin "Đã tạo booking #12" của tôi = bổ sung cho #12.
 
 Tin nhắn thoại: bấm micro trên BÀN PHÍM rồi đọc, tôi hiểu cả "ngày một tháng mười".
 Tôi làm đúng theo quyền của tài khoản Mô Hub đã liên kết với chat này.`;
@@ -149,6 +154,15 @@ async function xuLyCron(req: Request): Promise<Response> {
   await may.from("app_settings").upsert({ key: "bao_cao_sang_lan_cuoi", value: String(Date.now()) });
   await guiBaoCao({ db: may, tg, HUB, LICH }, Number(ADMIN_CHAT));   // báo cáo hệ thống → chạy quyền máy chủ
   await may.rpc("don_nhap_booking_cu");
+  // Ảnh giấy tờ khách: lưu đủ 3 tháng và khách đã trả phòng → xóa file trong kho rồi xóa dòng (Nghị định 13/2023)
+  const { data: hetHan } = await may.rpc("chung_tu_qua_han");
+  if (hetHan?.length) {
+    const { error } = await may.storage.from(KHO).remove(hetHan.map((x: any) => x.path));
+    if (!error) {
+      await may.from("booking_files").delete().in("id", hetHan.map((x: any) => x.id));
+      await tg("sendMessage", { chat_id: Number(ADMIN_CHAT), text: `🗑 Đã tự xóa ${hetHan.length} ảnh giấy tờ khách (lưu quá 3 tháng, khách đã trả phòng).` });
+    }
+  }
   return new Response("ok");
 }
 
@@ -214,10 +228,17 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
     await tg("sendMessage", { chat_id: chat, text: "Tôi chỉ lưu được ảnh (JPG, PNG, WEBP, HEIC) và PDF." });
     return;
   }
+  const rep = msg.reply_to_message;
+  // Trả lời (reply) tin của bot có "booking #12" → ảnh / thông tin mới thuộc booking #12
+  const idTuBot = rep?.from?.is_bot ? soBookingTuTinBot(rep.text ?? rep.caption) : null;
+
   if (tep) {
+    await ghiNhanTep(ctx, tep, msg.message_id);
+    if (idTuBot && !soBookingTrong(tep.caption)) tep.caption = `#${idTuBot} ${tep.caption ?? ""}`.trim();
     const chuThich = chuanHoaGiongNoi(tep.caption ?? "");
     const laGiayTo = tep.kind === "passport" || tep.kind === "cccd";
-    if (chuThich && !soBookingTrong(chuThich) && !laGiayTo && await xuLyDatPhong(ctx, chat, chuThich, tep)) return;
+    if (chuThich && !soBookingTrong(chuThich)) await nhoTinCuoi(ctx, chuThich, [tep]);
+    if (chuThich && !soBookingTrong(chuThich) && !laGiayTo && await xuLyDatPhong(ctx, chat, chuThich, [tep])) return;
     await xuLyAnh(ctx, chat, tep);
     return;
   }
@@ -225,6 +246,36 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
   if (!goc) return;
   // Chuẩn hóa câu đọc bằng giọng nói: số viết bằng chữ, "ngày 1 tháng 10" → 1/10
   const text: string = chuanHoaGiongNoi(goc.trim());
+
+  // ---- Ngữ cảnh: trả lời tin cũ, hoặc "làm lại" ----
+  if (!text.startsWith("/")) {
+    // Trả lời tin của bot về booking #12 → coi như bổ sung cho #12 (trừ khi là câu hỏi/lệnh khác)
+    if (idTuBot && !docYDinh(text) && !laYeuCauLamLai(text)) {
+      await lenhSua(ctx, chat, idTuBot, text);
+      return;
+    }
+    // Trả lời tin CỦA MÌNH (vd album ảnh hộ chiếu + nội dung booking) → làm lại với nội dung đó
+    let cu: { text: string; teps: TepCho[] } | null = null;
+    if (rep && !rep.from?.is_bot && !docYDinh(text)) {
+      const tepRep = layTep(rep);
+      let teps: TepCho[] = await tepCuaTin(ctx, rep.message_id);
+      if (!teps.length && tepRep && tepRep !== "khong_nhan") teps = [tepRep];
+      if (rep.media_group_id) teps = await tepCungAlbum(ctx, [rep.media_group_id], teps);
+      cu = { text: chuanHoaGiongNoi((rep.text ?? rep.caption ?? "").trim()), teps };
+    } else if (laYeuCauLamLai(text) && !docYDinh(text)) {
+      cu = await layTinCuoi(ctx);
+      if (!cu) {
+        await tg("sendMessage", { chat_id: chat, text: "Bạn muốn làm lại tin nào? Bấm giữ tin đó → Trả lời (Reply), rồi nhắn \"làm lại\"." });
+        return;
+      }
+    }
+    if (cu) {
+      const ghep = ghepNguCanh(cu.text, text);
+      if (await xuLyDatPhong(ctx, chat, ghep, cu.teps)) return;
+      if (cu.teps.length) { await xuLyAnh(ctx, chat, { ...cu.teps[0], caption: cu.teps[0].caption ?? ghep }); return; }
+      // Không phải booking → xử lý tin mới như bình thường ở dưới
+    }
+  }
 
   // "căn nào trống 10/10", "tìm Anna", "#12 sđt …" → quy về lệnh tương ứng
   const yd = text.startsWith("/") ? null : docYDinh(text);
@@ -272,14 +323,33 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
   else if (["/viec", "/xong", "/xoa"].includes(cmd))
     await tg("sendMessage", { chat_id: chat, text: `Lễ tân không còn ghi/sửa việc. Việc cần làm xem trên Mô Hub:\n${HUB}/viec.html` });
   else if (cmd.startsWith("/")) await tg("sendMessage", { chat_id: chat, text: "Không hiểu lệnh này. Gõ /help." });
-  else if (await xuLyDatPhong(ctx, chat, text)) {
+  else if (await (async () => { await nhoTinCuoi(ctx, text, []); return xuLyDatPhong(ctx, chat, text); })()) {
     // tin nhắn đặt phòng đã được xử lý (kể cả khi bị từ chối vì không có quyền)
   }
   else if (laViec(text))
     await tg("sendMessage", { chat_id: chat, text: `Đây có vẻ là việc cần làm. Lễ tân chỉ lo booking — việc ghi trên Mô Hub nhé:\n${HUB}/viec.html` });
-  else
+  else {
+    const hieu = daHieu(parseBooking(text, await layCan(db)));
     await tg("sendMessage", {
       chat_id: chat,
-      text: "Tôi chưa thấy tên căn và ngày trong tin này.\nVí dụ:\n  Gừng 10-12/10 anh Nam 0905123456\n  căn nào trống 20/10 3 đêm\n  tìm Anna\nGõ /help để xem đủ cách nhắn.",
+      text: (hieu ? `${hieu}Còn thiếu ${hieu.includes("căn ") || hieu.includes("nhà ") ? "ngày ở" : "tên căn và ngày ở"} nên tôi chưa tạo booking.\n\n`
+        : "Tôi chưa thấy tên căn và ngày trong tin này.\n") +
+        "Ví dụ:\n  Gừng 10-12/10 anh Nam 0905123456\n  căn nào trống 20/10 3 đêm\n  tìm Anna\n" +
+        "Nhắn bổ sung bằng cách Trả lời (Reply) tin cũ, tôi sẽ ghép lại. Gõ /help để xem đủ cách nhắn.",
     });
+  }
+}
+
+// ---------------- Tin cuối: để "làm lại" khi không trả lời tin nào ----------------
+async function nhoTinCuoi(ctx: Ctx, text: string, teps: TepCho[]) {
+  await ctx.db.from("bot_booking_drafts").delete().eq("payload->>kieu", "tin_cuoi");   // RLS: chỉ nháp của chính người nhắn
+  await ctx.db.from("bot_booking_drafts").insert({ text, payload: { kieu: "tin_cuoi", text, teps } });
+}
+async function layTinCuoi(ctx: Ctx): Promise<{ text: string; teps: TepCho[] } | null> {
+  const { data } = await ctx.db.from("bot_booking_drafts").select("payload")
+    .eq("payload->>kieu", "tin_cuoi").order("id", { ascending: false }).limit(1);
+  const p = data?.[0]?.payload;
+  if (!p) return null;
+  const nhom = [...new Set((p.teps ?? []).map((t: TepCho) => t.media_group_id).filter(Boolean))] as string[];
+  return { text: p.text, teps: nhom.length ? await tepCungAlbum(ctx, nhom, p.teps) : (p.teps ?? []) };
 }

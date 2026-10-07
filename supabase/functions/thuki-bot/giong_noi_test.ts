@@ -51,7 +51,9 @@ Deno.test("câu đọc bằng giọng nói: đặt dài hạn", () => {
   assertEquals(r.row.start_date, "2026-10-01");
   assertEquals(r.row.end_date, "2026-12-01");
   assertEquals(r.row.rent_amount, 20_000_000);
-  assertEquals(r.row.deposit_amount, 5_000_000);
+  // Thuê tháng: "cọc" là cọc bảo đảm (hoàn lại), không phải tiền trả trước — quyết định 07/10/2026
+  assertEquals(r.row.security_deposit, 5_000_000);
+  assertEquals(r.row.deposit_amount, null);
 });
 
 Deno.test("câu đọc bằng giọng nói: ngắn ngày, không có dấu chấm câu", () => {

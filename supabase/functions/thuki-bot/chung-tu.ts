@@ -52,6 +52,36 @@ export const soBookingTrong = (capt: string | null) => {
   return m ? Number(m[1] ?? m[2]) : null;
 };
 
+// ---------------- Nhật ký ảnh đã nhận ----------------
+// Mỗi ảnh gửi tới đều ghi một dòng nháp kieu "tep_nhan" (tự dọn sau 1 ngày cùng các nháp khác).
+// Nhờ vậy: album nhiều ảnh gom được về một booking, và trả lời (reply) tin nhắn ảnh cũ
+// "làm lại cho tôi" vẫn tìm lại được đủ ảnh.
+export async function ghiNhanTep(ctx: Ctx, tep: TepCho, messageId: number) {
+  await ctx.db.from("bot_booking_drafts").insert({ text: "tep", payload: { kieu: "tep_nhan", tep, message_id: messageId } });
+}
+
+// Mọi ảnh cùng album (media_group_id), không trùng file
+export async function tepCungAlbum(ctx: Ctx, nhom: string[], daCo: TepCho[] = []): Promise<TepCho[]> {
+  const out = [...daCo];
+  const thay = new Set(out.map((t) => t.file_id));
+  for (const g of nhom) {
+    const { data } = await ctx.db.from("bot_booking_drafts").select("payload")
+      .eq("payload->>kieu", "tep_nhan").eq("payload->tep->>media_group_id", g).order("id");
+    for (const x of data ?? []) {
+      const t: TepCho = x.payload.tep;
+      if (!thay.has(t.file_id)) { thay.add(t.file_id); out.push(t); }
+    }
+  }
+  return out;
+}
+
+// Ảnh của một tin nhắn cụ thể (theo message_id) — dùng khi trả lời tin ảnh cũ
+export async function tepCuaTin(ctx: Ctx, messageId: number): Promise<TepCho[]> {
+  const { data } = await ctx.db.from("bot_booking_drafts").select("payload")
+    .eq("payload->>kieu", "tep_nhan").eq("payload->>message_id", String(messageId)).limit(1);
+  return (data ?? []).map((x: any) => x.payload.tep);
+}
+
 // ---------------- Lưu một tệp vào booking ----------------
 export async function luuChungTu(ctx: Ctx, bookingId: number, tep: TepCho): Promise<string | null> {
   const { db } = ctx;
@@ -123,9 +153,15 @@ export async function xuLyAnh(ctx: Ctx, chat: number, tep: TepCho) {
     await db.from("bot_booking_drafts").insert({ text: "album", payload: { kieu: "album", media_group_id: tep.media_group_id, booking_id: id } });
   }
   if (!id && tep.media_group_id) {
-    const { data: album } = await db.from("bot_booking_drafts").select("payload")
-      .eq("payload->>kieu", "album").eq("payload->>media_group_id", tep.media_group_id).limit(1);
-    id = album?.[0]?.payload?.booking_id ?? null;
+    // Telegram gửi các ảnh của album gần như cùng lúc: chờ tối đa ~4 giây cho ảnh đầu (có chú thích)
+    for (let lan = 0; lan < 4 && !id; lan++) {
+      const { data: album } = await db.from("bot_booking_drafts").select("payload")
+        .eq("payload->>kieu", "album").eq("payload->>media_group_id", tep.media_group_id).limit(1);
+      const a = album?.[0]?.payload;
+      if (a?.booking_id) id = a.booking_id;
+      else if (a?.nhap_id) return;            // ảnh đầu là tin đặt phòng đang chờ ✅ — ảnh này sẽ gắn theo khi tạo
+      else if (lan < 3) await new Promise((r) => setTimeout(r, 1200));
+    }
   }
   if (id) return ganVaBao(ctx, chat, id, tep);
 
@@ -175,18 +211,16 @@ export async function xuLyNutAnh(ctx: Ctx, cq: any, nhapId: string, bookingId: n
   const { data: nhap } = await db.from("bot_booking_drafts").select("*").eq("id", nhapId).maybeSingle();
   if (!nhap) return "Bản nháp đã hết hạn";
   const tep: TepCho = nhap.payload.tep;
-  let ds = [{ id: nhap.id, tep }];
+  const dsTep = tep.media_group_id ? await tepCungAlbum(ctx, [tep.media_group_id], [tep]) : [tep];
   if (tep.media_group_id) {
-    const { data: cung } = await db.from("bot_booking_drafts").select("id,payload")
-      .eq("payload->>kieu", "anh").eq("payload->tep->>media_group_id", tep.media_group_id);
-    ds = (cung ?? []).map((x: any) => ({ id: x.id, tep: x.payload.tep }));
-  }
+    await db.from("bot_booking_drafts").delete().eq("payload->>kieu", "anh").eq("payload->tep->>media_group_id", tep.media_group_id);
+    await db.from("bot_booking_drafts").insert({ text: "album", payload: { kieu: "album", media_group_id: tep.media_group_id, booking_id: bookingId } });
+  } else await db.from("bot_booking_drafts").delete().eq("id", nhap.id);
   let ok = 0;
   const loi: string[] = [];
-  for (const x of ds) {
-    const l = await luuChungTu(ctx, bookingId, x.tep);
+  for (const t of dsTep) {
+    const l = await luuChungTu(ctx, bookingId, t);
     if (l) loi.push(l); else ok++;
-    await db.from("bot_booking_drafts").delete().eq("id", x.id);
   }
   const b = await moTaBooking(ctx, bookingId);
   await tg("editMessageText", {
@@ -198,7 +232,14 @@ export async function xuLyNutAnh(ctx: Ctx, cq: any, nhapId: string, bookingId: n
 }
 
 // Ảnh gửi kèm tin đặt phòng (chú thích là nội dung booking) → gắn sau khi bấm ✅ Tạo booking
-export async function ganAnhSauKhiTao(ctx: Ctx, bookingId: number, dsTep: TepCho[]): Promise<string> {
+export async function ganAnhSauKhiTao(ctx: Ctx, bookingId: number, dsTepGoc: TepCho[]): Promise<string> {
+  const nhom = [...new Set(dsTepGoc.map((t) => t.media_group_id).filter(Boolean))] as string[];
+  const dsTep = await tepCungAlbum(ctx, nhom, dsTepGoc);
+  // Ảnh album đến muộn (sau khi bấm ✅) đi thẳng vào booking này
+  for (const g of nhom) {
+    await ctx.db.from("bot_booking_drafts").delete().eq("payload->>kieu", "album").eq("payload->>media_group_id", g);
+    await ctx.db.from("bot_booking_drafts").insert({ text: "album", payload: { kieu: "album", media_group_id: g, booking_id: bookingId } });
+  }
   let ok = 0;
   for (const tep of dsTep) if (!(await luuChungTu(ctx, bookingId, tep))) ok++;
   return ok ? `\n📎 Đã lưu ${ok} ảnh kèm theo.` : dsTep.length ? "\n❌ Chưa lưu được ảnh kèm theo — gửi lại ảnh với chú thích #" + bookingId : "";
