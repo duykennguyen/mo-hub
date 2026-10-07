@@ -339,14 +339,14 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
     });
   }
   else if (["/viec", "/xong", "/xoa"].includes(cmd))
-    await tg("sendMessage", { chat_id: chat, text: `Lễ tân không còn ghi/sửa việc. Việc cần làm xem trên Mô Hub:\n${HUB}/viec.html` });
+    await tg("sendMessage", { chat_id: chat, text: "Lễ tân chỉ lo booking, hệ thống không còn mục giao việc." });
   else if (cmd.startsWith("/")) await tg("sendMessage", { chat_id: chat, text: "Không hiểu lệnh này. Gõ /help." });
   else if (hdong) await xuLyHanhDong(ctx, chat, hdong, p.nguoi.vai_tro === "admin");
   else if (await (async () => { await nhoTinCuoi(ctx, text, []); return xuLyDatPhong(ctx, chat, text); })()) {
     // tin nhắn đặt phòng đã được xử lý (kể cả khi bị từ chối vì không có quyền)
   }
   else if (laViec(text))
-    await tg("sendMessage", { chat_id: chat, text: `Đây có vẻ là việc cần làm. Lễ tân chỉ lo booking — việc ghi trên Mô Hub nhé:\n${HUB}/viec.html` });
+    await tg("sendMessage", { chat_id: chat, text: "Đây có vẻ là việc cần làm. Lễ tân chỉ lo booking, hệ thống không còn mục giao việc." });
   else {
     const hieu = daHieu(parseBooking(text, await layCan(db)));
     await tg("sendMessage", {

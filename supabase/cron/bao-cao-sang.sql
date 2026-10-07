@@ -4,7 +4,7 @@
 --
 -- 1) 08:00 giờ Việt Nam mỗi ngày: Thư kí nhắn báo cáo lịch khách.
 -- 2) 06:00 giờ Việt Nam mỗi ngày: tự chuyển trạng thái booking theo ngày.
--- 3) 06:10 giờ Việt Nam mỗi ngày: sinh việc cảnh báo hợp đồng / thu tiền / cọc.
+-- 3) (ĐÃ TẮT 07/10/2026) 06:10 giờ Việt Nam: sinh việc cảnh báo hợp đồng / thu tiền / cọc.
 --
 -- LƯU Ý: pg_cron chạy theo giờ UTC. Việt Nam = UTC+7 nên 08:00 VN = 01:00 UTC.
 -- =====================================================================
@@ -43,12 +43,15 @@ $cron$);
 
 -- 3) Cảnh báo hằng ngày: hợp đồng còn 30/15/7 ngày, khoản thu quá hạn, cọc chưa hoàn.
 --    Chạy 06:10 giờ VN, sau bước đổi trạng thái để số liệu đã đúng của ngày mới.
-select cron.schedule('mo-canh-bao-hang-ngay', '10 23 * * *', $cron$
-  select public.tao_canh_bao();
-$cron$);
+-- TẮT từ 07/10/2026: mục Giao việc đã gỡ khỏi Mô Hub nên việc cảnh báo không còn ai xem.
+-- Hợp đồng sắp hết hạn và khoản thu quá hạn vẫn hiện ở khối "Cần xử lý hôm nay" và báo cáo 8h.
+-- Muốn bật lại thì bỏ dấu "--" ở 3 dòng dưới rồi chạy lại file này.
+-- select cron.schedule('mo-canh-bao-hang-ngay', '10 23 * * *', $cron$
+--   select public.tao_canh_bao();
+-- $cron$);
 
 -- ---------------------------------------------------------------------
--- Kiểm tra: phải thấy 3 dòng, cột active = true
+-- Kiểm tra: phải thấy thuki-bao-cao-sang và mo-cap-nhat-trang-thai-booking, cột active = true
 select jobname, schedule, active from cron.job order by jobname;
 
 -- Xem 10 lần chạy gần nhất (sau khi lịch đã chạy ít nhất một lần):

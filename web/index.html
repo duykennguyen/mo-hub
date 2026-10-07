@@ -43,12 +43,6 @@
       </div>
     </div>
     <div class="o-luoi">
-      <div class="o">
-        <h3><a href="viec.html">Giao việc</a></h3>
-        <div><span class="so" id="soMo">–</span> <span class="muted">việc đang mở</span></div>
-        <div class="muted" id="soTre"></div>
-        <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
-      </div>
       <div class="o hide" id="oNha">
         <h3><a href="nha.html">Quản lý nhà</a></h3>
         <p class="muted">Tên nhà và các căn, giá niêm yết, bí danh cho Lễ tân, bật/tắt xuất bản ra trang khách.</p>
@@ -124,13 +118,8 @@ Mo.gate(async (me) => {
     </div>`).join("");
   $("#public").onclick = (e) => { const i = e.target.dataset.copy; if (i !== undefined) copy(C.PUBLIC_SITES[i].url); };
 
-  // Đếm việc
-  const { data: open } = await sb.from("tasks").select("id,title,due_date,priority").eq("status", "open").is("deleted_at", null);
-  const today = vnToday();
-  $("#soMo").textContent = open?.length ?? 0;
-  const tre = (open ?? []).filter((t) => t.due_date && t.due_date < today).length;
-  $("#soTre").innerHTML = tre ? `<span style="color:var(--canh-bao);font-weight:600">${tre} việc quá hạn</span>` : "Không có việc quá hạn";
-  canXuLy(me, open ?? [], today);
+  // Mục Giao việc đã gỡ (07/10/2026) — khối "Cần xử lý hôm nay" chỉ còn khách và tiền
+  canXuLy(me, vnToday());
 
   // Ẩn/hiện khối theo phân quyền (chặn thật nằm ở RLS trong database)
   if (!me.isAdmin) {
@@ -197,23 +186,10 @@ async function loadTelegram() {
 }
 
 // ---------- Cần xử lý hôm nay ----------
-// Việc thì ai cũng thấy (RLS đã lọc sẵn). Phần khách và tiền chỉ gọi khi người này
-// có quyền xem đặt phòng — gọi khi không có quyền thì database ném lỗi.
-async function canXuLy(me, viec, today) {
+// Phần khách và tiền chỉ gọi khi người này có quyền xem đặt phòng —
+// gọi khi không có quyền thì database ném lỗi.
+async function canXuLy(me, today) {
   const o = [];
-  const tre = viec.filter((t) => t.due_date && t.due_date < today);
-  const nay = viec.filter((t) => t.due_date === today);
-  const gap = viec.filter((t) => t.priority === "cao" && !t.due_date);
-  if (tre.length || nay.length || gap.length) {
-    const ds = [...tre, ...nay, ...gap].slice(0, 4);
-    o.push(`<div class="o">
-      <h3><a href="viec.html">Việc phải làm</a></h3>
-      <div>${tre.length ? `<span class="so" style="color:var(--canh-bao)">${tre.length}</span> <span class="muted">quá hạn</span> ` : ""}
-        ${nay.length ? `<span class="so">${nay.length}</span> <span class="muted">đến hạn hôm nay</span>` : ""}</div>
-      <ul class="tom-tat">${ds.map((t) => `<li>${esc(t.title)}</li>`).join("")}</ul>
-      <div class="hanh-dong"><a class="btn" href="viec.html">Mở bảng việc</a></div>
-    </div>`);
-  }
 
   const xemDuocBooking = ["admin", "manager", "viewer"].includes(me.role) && me.can_see_booking !== false;
   if (xemDuocBooking) {
