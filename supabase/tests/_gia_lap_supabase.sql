@@ -41,3 +41,14 @@ create schema net;
 create table net.goi (id serial, url text, headers jsonb, body jsonb);
 create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000) returns bigint
 language sql as $$ insert into net.goi (url, headers, body) values (url, headers, body) returning id $$;
+
+-- Supabase Storage giả lập (chỉ bảng + RLS, không lưu file thật)
+create schema storage;
+create table storage.buckets (id text primary key, name text not null, owner uuid, public boolean default false,
+  file_size_limit bigint, allowed_mime_types text[], created_at timestamptz default now());
+create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets(id),
+  name text, owner uuid default auth.uid(), metadata jsonb, created_at timestamptz default now(), unique (bucket_id, name));
+alter table storage.objects enable row level security;
+grant usage on schema storage to anon, authenticated, service_role;
+grant all on storage.objects to anon, authenticated, service_role;
+grant select on storage.buckets to anon, authenticated, service_role;
