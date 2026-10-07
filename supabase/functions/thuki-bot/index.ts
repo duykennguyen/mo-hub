@@ -1,11 +1,16 @@
-// THƯ KÍ — bot Telegram ghi việc vào Mô Hub. Miễn phí: phân tích bằng luật, không dùng AI trả phí.
+// LỄ TÂN (trước đây là Thư kí) — bot Telegram ghi và tra booking các nhà của Mô.
+// Miễn phí: phân tích bằng luật, không dùng AI trả phí.
 // Mỗi chat phải liên kết với một hồ sơ Mô Hub; mọi đọc/ghi chạy bằng phiên đăng nhập của
 // chính người nhắn nên RLS áp dụng như trên web. Webhook bảo vệ bằng TELEGRAM_WEBHOOK_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { iso, noAccent, parseTask, vnToday } from "./parse.ts";
-import { guiBaoCao, lenhDat, lenhDoiNgay, lenhHuy, xuLyDatPhong, xuLyNutBooking, type Ctx } from "./booking-bot.ts";
+import {
+  guiBaoCao, lenhDat, lenhDoiNgay, lenhHuy, lenhSua, lenhTim, lenhTrong, lenhXem, xuLyDatPhong, xuLyNutBooking, type Ctx,
+} from "./booking-bot.ts";
+import { laViec } from "./parse-booking.ts";
+import { docYDinh } from "./y-dinh.ts";
+import { layTep, soBookingTrong, xuLyAnh } from "./chung-tu.ts";
 import { chuanHoaGiongNoi } from "./giong-noi.ts";
-import { congDanhTinh, khopBiMat, laLoiQuyen, moPhien, type Phien } from "./danh-tinh.ts";
+import { congDanhTinh, khopBiMat, moPhien, type Phien } from "./danh-tinh.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const URL_SB = env("SUPABASE_URL");
@@ -27,6 +32,15 @@ const HUB = env("HUB_URL").replace(/\/$/, "");
 const LICH = (env("CALENDAR_URL") || "https://duykennguyen.github.io/mo-house-calendar/").replace(/\/$/, "");
 const ADMIN_CHAT = env("ADMIN_CHAT_ID");
 
+// Tải ảnh/file người nhắn gửi lên (Bot API cho tải tối đa 20 MB)
+async function taiFile(fileId: string): Promise<{ bytes: Uint8Array }> {
+  const r = await (await tg("getFile", { file_id: fileId })).json();
+  if (!r.ok) throw new Error(r.description ?? "getFile lỗi");
+  const res = await fetch(`https://api.telegram.org/file/bot${env("TELEGRAM_BOT_TOKEN")}/${r.result.file_path}`);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return { bytes: new Uint8Array(await res.arrayBuffer()) };
+}
+
 const tg = (method: string, body: unknown) =>
   fetch(`${TG}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
@@ -41,87 +55,79 @@ const depsPhien = {
   taoClient: (headers: Record<string, string>) => createClient(URL_SB, KHOA_CONG_KHAI, { ...KHONG_LUU, global: { headers } }),
 };
 
-// ---------------- Phân tích tin nhắn ----------------
-const CAT_LABEL: Record<string, string> = { ky_thuat: "🔧 Kỹ thuật", buong_phong: "🧺 Buồng phòng", quan_ly: "📋 Quản lý", khac: "📌 Khác" };
-const PRI_LABEL: Record<string, string> = { cao: "🔴 Gấp", thuong: "", thap: "⚪ Không gấp" };
+// ---------------- Lễ tân ----------------
+// 10/2026: chủ dự án bỏ phần GIAO VIỆC khỏi bot, bot đổi tên Thư kí → Lễ tân và chỉ lo booking.
+// Code đọc việc vẫn còn ở parse.ts (parseTask) để bật lại khi cần; việc thì ghi trên Mô Hub.
 const VAI_TRO: Record<string, string> = { admin: "quản trị", manager: "quản lý", staff: "nhân viên", viewer: "chỉ xem" };
-const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+const TEN_BOT = "Lễ tân Mô";
 
-function summary(task: any, propName: string | null) {
-  const due = task.due_date ? (() => { const d = new Date(task.due_date + "T00:00:00Z");
-    return `⏰ ${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")} (${WD[d.getUTCDay()]})`; })() : "⏰ chưa có hạn";
-  return [
-    `✅ Đã ghi #${task.id}: ${task.title}`,
-    [`🏠 ${propName ?? "Chung"}`, task.location ? `📍 ${task.location}` : "", CAT_LABEL[task.category], due, PRI_LABEL[task.priority]]
-      .filter(Boolean).join("   "),
-  ].join("\n");
-}
-// Nút "Hủy việc" chỉ hiện với quản trị viên: xóa việc là quyền riêng của admin (database cũng chặn)
-const catButtons = (id: number, laAdmin: boolean) => ({
-  inline_keyboard: [[
-    { text: "🔧 Kỹ thuật", callback_data: `c:${id}:ky_thuat` },
-    { text: "🧺 Buồng phòng", callback_data: `c:${id}:buong_phong` },
-    { text: "📋 Quản lý", callback_data: `c:${id}:quan_ly` },
-  ], ...(laAdmin ? [[{ text: "🗑 Hủy việc này", callback_data: `x:${id}` }]] : [])],
-});
+const HELP = `Lễ tân Mô 🛎 — sắp xếp booking các nhà của Mô
+Nhắn tự nhiên, càng đủ càng tốt (không cần đúng thứ tự):
 
-const KHONG_QUYEN_GHI = "🚫 Tài khoản của bạn không có quyền ghi việc này (chỉ xem, hoặc nhà không thuộc phạm vi được giao).";
+ĐẶT PHÒNG — có tên căn/nhà + ngày là tôi hiểu:
+  đặt Gừng cho Anna từ 1/10 đến 1/12, 20tr/tháng, cọc 5tr
+  Nhà Sen 10-15/10 anh Nam 0905123456 airbnb
+  book Củ Sả 20/10 3 đêm 800k/đêm, khách Hàn 2 người lớn 1 trẻ em, bay tới 14h, đón sân bay
+  khách thuê Thơm cả tháng 12, chị Hoa, môi giới chị Lan hoa hồng 2tr
+Tôi luôn hiện bản xem trước, bấm ✅ mới ghi vào lịch.
 
-async function createTask(p: Phien, chat: number, row: any, propName: string | null) {
-  const { data, error } = await p.db.from("tasks").insert(row).select().single();
-  if (error) return tg("sendMessage", { chat_id: chat, text: laLoiQuyen(error) ? KHONG_QUYEN_GHI : "❌ Lỗi ghi việc: " + error.message });
-  return tg("sendMessage", { chat_id: chat, text: summary(data, propName), reply_markup: catButtons(data.id, p.nguoi.vai_tro === "admin") });
-}
+Tôi đọc được: tên khách (cho / tên / anh / chị / Mr…), SĐT, email, quốc tịch,
+số khách, giờ đến, giá (tổng · /tháng · /đêm), trả trước, cọc bảo đảm,
+hoa hồng, kênh (Airbnb, Booking, Agoda, Traveloka, môi giới, trực tiếp…),
+miễn phí, yêu cầu riêng (đón sân bay, nôi em bé, giường phụ…)
+và "ghi chú: …" (giữ nguyên văn).
 
-async function listOpen(p: Phien, chat: number, arg: string, props: any[]) {
-  // RLS đã lọc: người bị giới hạn theo nhà chỉ thấy việc của nhà được giao
-  let q = p.db.from("tasks").select("id,title,due_date,priority,property_id,location")
-    .eq("status", "open").is("deleted_at", null).order("due_date", { ascending: true, nullsFirst: false });
-  let prop: any = null;
-  if (arg) {
-    const kw = noAccent(arg);
-    prop = props.find((x) => [x.code, x.name, ...(x.aliases ?? [])].some((k) => noAccent(k) === kw || noAccent(k).includes(kw)));
-    if (!prop) return tg("sendMessage", { chat_id: chat, text: `Không tìm thấy nhà "${arg}".` });
-    q = q.eq("property_id", prop.id);
-  }
-  const { data } = await q.limit(40);
-  if (!data?.length) return tg("sendMessage", { chat_id: chat, text: "🎉 Không còn việc nào đang mở." });
-  const name = (id: string) => props.find((x) => x.id === id)?.name ?? "Chung";
-  const today = iso(vnToday());
-  const lines = data.map((t: any) =>
-    `${t.priority === "cao" ? "🔴" : t.due_date && t.due_date < today ? "⚠️" : "•"} #${t.id} ${prop ? "" : `[${name(t.property_id)}] `}${t.title}${t.due_date ? ` — ${t.due_date.slice(8)}/${t.due_date.slice(5, 7)}` : ""}`);
-  return tg("sendMessage", { chat_id: chat, text: `📋 Việc đang mở${prop ? " — " + prop.name : ""} (${data.length}):\n\n${lines.join("\n")}\n\n${HUB}/viec.html` });
-}
+BỔ SUNG cho booking đã có:
+  #12 sđt 0905123456 · #12 cọc 5tr · #12 khách Nhật, 3 người
+  #12 tên Kim Min-ji · #12 ghi chú: đến muộn
 
-const HELP = `Thư kí Mô Hub 🗂
-Nhắn tự nhiên, có tên nhà, loại việc và hạn:
-  "nhà Sen vòi sen phòng 2 rỉ nước, gọi thợ trước thứ 3"
-  "dọn phòng + thay ga nhà Mây mai, gấp"
+HỎI NHANH (gõ lời hoặc lệnh):
+  căn nào trống 10-15/10 → /trong 10/10 - 15/10
+  tìm Anna · tra 0905123456 → /tim
+  xem #12 → /xem 12
+  ai đang ở · hôm nay → /lich
+  booking sắp tới → /dat
+  dời 12 sang 5-8/11 → /doi 12 5/11 - 8/11
+  hủy booking 12 → /huy 12
+  /nha — danh sách nhà & tên căn
 
-Tôi phân biệt hai loại tin nhắn:
-• VIỆC — mở đầu bằng động từ: "dọn Củ Sả mai", "sửa máy lạnh Gừng"
-• ĐẶT PHÒNG — có chữ đặt/book/giữ chỗ, hoặc có chữ "khách" kèm ngày:
-  "khách book Củ Sả ngày mai, 2 đêm, a Duy"
+ẢNH HỘ CHIẾU / CCCD / GHI CHÚ — gửi ảnh (hoặc file PDF) kèm chú thích:
+  #12 passport C1234567   → lưu vào booking #12, ghi số hộ chiếu vào hồ sơ khách
+  #12 ghi chú             → ảnh ghi chú của booking #12
+  Không ghi số booking thì tôi hỏi lại bằng nút. Gửi nhiều ảnh một lượt: chú thích ở ảnh đầu là đủ.
+  Ảnh chỉ quản trị và quản lý xem được, hiện trong phần Ghi chú của booking trên lịch.
 
-Đặt phòng — nhắn có chữ "đặt" ở đầu:
-  "đặt Gừng cho Anna từ 1/10 đến 1/12, 20tr, cọc 5tr"
-  "đặt nhà Sen 5 đêm từ 10/10 cho anh Nam, airbnb"
-Tôi luôn hiện bản xem trước, bấm nút xác nhận mới ghi vào lịch.
-
-Lệnh việc:
-/viec — mọi việc đang mở
-/viec sen — việc của một nhà
-/xong 12 — đánh dấu việc #12 đã xong
-/xoa 12 — xóa việc #12 (chỉ quản trị)
-/nha — danh sách nhà & bí danh
-
-Lệnh lịch:
-/lich — báo cáo hôm nay (ai đến, ai đi, ai đang ở)
-/dat — booking sắp tới
-/huy 12 — hủy booking #12
-/doi 12 5/10 - 5/11 — đổi ngày booking #12
-
+Tin nhắn thoại: bấm micro trên BÀN PHÍM rồi đọc, tôi hiểu cả "ngày một tháng mười".
 Tôi làm đúng theo quyền của tài khoản Mô Hub đã liên kết với chat này.`;
+
+const LENH_MENU = [
+  { command: "trong", description: "Căn nào còn trống (vd /trong 10/10 - 15/10)" },
+  { command: "tim", description: "Tìm khách theo tên hoặc SĐT" },
+  { command: "xem", description: "Xem chi tiết booking (vd /xem 12)" },
+  { command: "dat", description: "Booking sắp tới" },
+  { command: "lich", description: "Báo cáo hôm nay: ai đến, ai đi, ai đang ở" },
+  { command: "sua", description: "Bổ sung thông tin booking (vd /sua 12 sđt 0905…)" },
+  { command: "doi", description: "Đổi ngày booking (vd /doi 12 5/11 - 8/11)" },
+  { command: "huy", description: "Hủy booking (vd /huy 12)" },
+  { command: "nha", description: "Danh sách nhà và tên căn" },
+  { command: "help", description: "Hướng dẫn nhắn tin cho Lễ tân" },
+];
+
+// Đổi tên hiển thị + menu lệnh trên Telegram. Chạy một lần mỗi lần function khởi động,
+// chỉ gọi set… khi tên còn khác (Telegram giới hạn số lần đổi tên).
+let daCaiBot = false;
+async function caiDatBot() {
+  if (daCaiBot) return;
+  daCaiBot = true;
+  try {
+    const ten = await (await tg("getMyName", {})).json();
+    if (ten?.result?.name === TEN_BOT) return;
+    await tg("setMyName", { name: TEN_BOT });
+    await tg("setMyCommands", { commands: LENH_MENU });
+    await tg("setMyShortDescription", { short_description: "Lễ tân Mô Đi Phê — ghi và tra booking các nhà của Mô." });
+    await tg("setMyDescription", { description: "Nhắn booking tự nhiên (căn, ngày, tên khách, SĐT, giá…), tôi hiện bản xem trước rồi mới ghi vào lịch Mô House." });
+  } catch { /* lỗi mạng thì để lần khởi động sau */ }
+}
 
 // ---------------- Lịch tự động (pg_cron) ----------------
 // Header X-Mo-Cron-Secret phải khớp CRON_SECRET (bản sao nằm trong Supabase Vault để job đọc).
@@ -153,6 +159,7 @@ Deno.serve(async (req) => {
   if (!khopBiMat(req.headers.get("X-Telegram-Bot-Api-Secret-Token") ?? "", env("TELEGRAM_WEBHOOK_SECRET")))
     return new Response("forbidden", { status: 403 });
   const up = await req.json();
+  await caiDatBot();
   const cong = await congDanhTinh(up, { may, tg, hub: HUB, adminChat: ADMIN_CHAT });
   if (!cong) return new Response("ok");
   const { nguoi, chat } = cong;
@@ -166,8 +173,8 @@ Deno.serve(async (req) => {
     return new Response("ok");
   }
   try {
-    const ctx: Ctx = { db: phien.db, tg, HUB, LICH };
-    if (cq) await xuLyNut(phien, ctx, cq, chat);
+    const ctx: Ctx = { db: phien.db, tg, HUB, LICH, taiFile };
+    if (cq) await xuLyNut(ctx, cq);
     else if (msg) await xuLyTinNhan(phien, ctx, msg, chat);
   } finally {
     await phien.dong();
@@ -176,44 +183,19 @@ Deno.serve(async (req) => {
 });
 
 // ---------------- Bấm nút ----------------
-async function xuLyNut(p: Phien, ctx: Ctx, cq: any, chat: number) {
-  const db = p.db;
-  // Nút của phần đặt phòng xử lý riêng
-  const ghiChuBooking = await xuLyNutBooking(ctx, cq);
-  if (ghiChuBooking !== null) {
-    await tg("answerCallbackQuery", { callback_query_id: cq.id, text: ghiChuBooking });
-    return;
-  }
-  const [kind, a, b] = String(cq.data).split(":");
-  let note = "Đã cập nhật";
-  if (kind === "c") {
-    const { data: t } = await db.from("tasks").update({ category: b }).eq("id", a).select("*, properties(name)").maybeSingle();
-    if (t) await tg("editMessageText", { chat_id: chat, message_id: cq.message.message_id, text: summary(t, t.properties?.name ?? null), reply_markup: catButtons(t.id, p.nguoi.vai_tro === "admin") });
-    else note = "Không đổi được (không có quyền sửa việc này)";
-  } else if (kind === "x") {
-    const { error } = await db.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", a);
-    if (error) note = "Chỉ quản trị viên được xóa việc";
-    else { await tg("editMessageText", { chat_id: chat, message_id: cq.message.message_id, text: `🗑 Đã hủy việc #${a}.` }); note = "Đã hủy"; }
-  } else if (kind === "p") { // chọn nhà cho bản nháp (RLS: chỉ thấy nháp của chính mình)
-    const { data: draft } = await db.from("bot_drafts").select("*").eq("id", a).maybeSingle();
-    if (draft) {
-      const { data: props } = await db.from("properties").select("*").eq("active", true);
-      const parsed = parseTask(draft.text, []);
-      const prop = props?.find((x: any) => x.id === b) ?? null;
-      parsed.row.property_id = prop?.id ?? null;
-      await db.from("bot_drafts").delete().eq("id", a);
-      await tg("deleteMessage", { chat_id: chat, message_id: cq.message.message_id });
-      await createTask(p, chat, parsed.row, prop?.name ?? null);
-      note = "Đã ghi";
-    } else note = "Bản nháp không còn";
-  }
-  await tg("answerCallbackQuery", { callback_query_id: cq.id, text: note });
+async function xuLyNut(ctx: Ctx, cq: any) {
+  const ghiChu = await xuLyNutBooking(ctx, cq);
+  // Nút việc (c:/x:/p:) trên các tin nhắn cũ của Thư kí: phần giao việc đã tắt
+  await tg("answerCallbackQuery", {
+    callback_query_id: cq.id,
+    text: ghiChu ?? "Lễ tân không còn xử lý việc. Sửa việc trên Mô Hub nhé.",
+  });
 }
 
 // ---------------- Tin nhắn ----------------
 async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
   const db = p.db;
-  // Tin nhắn thoại / ghi âm: Thư kí không nghe được (không dùng dịch vụ nhận dạng trả phí).
+  // Tin nhắn thoại / ghi âm: Lễ tân không nghe được (không dùng dịch vụ nhận dạng trả phí).
   // Trả lời hướng dẫn thay vì im lặng cho người gửi khỏi tưởng bot hỏng.
   if (msg.voice || msg.audio || msg.video_note) {
     await tg("sendMessage", {
@@ -225,66 +207,79 @@ async function xuLyTinNhan(p: Phien, ctx: Ctx, msg: any, chat: number) {
     });
     return;
   }
-  if (!msg.text) return;
-  // Chuẩn hóa câu đọc bằng giọng nói: số viết bằng chữ, "ngày 1 tháng 10" → 1/10
-  const text: string = chuanHoaGiongNoi(msg.text.trim());
-
-  // RLS lọc sẵn: người bị giới hạn chỉ thấy nhà và căn được giao
-  const props = (await db.from("properties").select("*").eq("active", true).order("sort")).data ?? [];
-  // Tên căn cũng là một cách gọi nhà: nhắn "Củ Sả" thì việc phải vào CamF, không phải nhà khác.
-  // Không có bước này thì bộ đọc việc chỉ biết tên nhà và dễ khớp nhầm sang nhà gần giống.
-  const dsCan = (await db.from("units").select("name,property_id").eq("active", true)).data ?? [];
-  for (const u of dsCan) {
-    const x = props.find((y: any) => y.id === u.property_id);
-    if (x && u.name) x.aliases = [...(x.aliases ?? []), u.name];
+  // Ảnh / file (hộ chiếu, CCCD, ảnh ghi chú) → lưu vào booking. Chú thích "#12" thì lưu thẳng;
+  // chú thích là nội dung đặt phòng thì tạo booking rồi gắn ảnh; không rõ thì hỏi booking nào.
+  const tep = layTep(msg);
+  if (tep === "khong_nhan") {
+    await tg("sendMessage", { chat_id: chat, text: "Tôi chỉ lưu được ảnh (JPG, PNG, WEBP, HEIC) và PDF." });
+    return;
   }
-  const [cmd, ...args] = text.split(/\s+/);
+  if (tep) {
+    const chuThich = chuanHoaGiongNoi(tep.caption ?? "");
+    const laGiayTo = tep.kind === "passport" || tep.kind === "cccd";
+    if (chuThich && !soBookingTrong(chuThich) && !laGiayTo && await xuLyDatPhong(ctx, chat, chuThich, tep)) return;
+    await xuLyAnh(ctx, chat, tep);
+    return;
+  }
+  const goc: string | undefined = msg.text;
+  if (!goc) return;
+  // Chuẩn hóa câu đọc bằng giọng nói: số viết bằng chữ, "ngày 1 tháng 10" → 1/10
+  const text: string = chuanHoaGiongNoi(goc.trim());
+
+  // "căn nào trống 10/10", "tìm Anna", "#12 sđt …" → quy về lệnh tương ứng
+  const yd = text.startsWith("/") ? null : docYDinh(text);
+  const [lenhGoc, ...args] = yd ? [`/${yd.lenh}`, ...yd.thamSo.split(/\s+/).filter(Boolean)] : text.split(/\s+/);
+  const cmd = lenhGoc.toLowerCase().replace(/@\w+$/, "");   // "/trong@ThuKiMo_bot" khi gõ trong nhóm
   const arg = args.join(" ");
+  const so = (x?: string) => Number((x ?? "").replace(/^#/, ""));
 
   if (cmd === "/start" || cmd === "/help")
     await tg("sendMessage", { chat_id: chat, text: `👤 ${p.nguoi.ten} (${VAI_TRO[p.nguoi.vai_tro] ?? p.nguoi.vai_tro})\n\n${HELP}` });
   else if (cmd === "/lich") await guiBaoCao(ctx, chat);
   else if (cmd === "/dat") await lenhDat(ctx, chat);
+  else if (cmd === "/trong") await lenhTrong(ctx, chat, arg);
+  else if (cmd === "/tim") await lenhTim(ctx, chat, arg);
+  else if (cmd === "/xem") {
+    if (!so(args[0])) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /xem 12" });
+    else await lenhXem(ctx, chat, so(args[0]));
+  }
+  else if (cmd === "/sua") {
+    if (!so(args[0])) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /sua 12 sđt 0905123456 cọc 5tr" });
+    else await lenhSua(ctx, chat, so(args[0]), args.slice(1).join(" "));
+  }
   else if (cmd === "/huy") {
-    const id = Number(args[0]);
-    if (!id) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /huy 12" });
-    else await lenhHuy(ctx, chat, id);
+    if (!so(args[0])) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /huy 12" });
+    else await lenhHuy(ctx, chat, so(args[0]));
   }
   else if (cmd === "/doi") {
-    const id = Number(args[0]);
-    if (!id) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /doi 12 5/10 - 5/11" });
-    else await lenhDoiNgay(ctx, chat, id, args.slice(1).join(" "));
+    if (!so(args[0])) await tg("sendMessage", { chat_id: chat, text: "Cú pháp: /doi 12 5/10 - 5/11" });
+    else await lenhDoiNgay(ctx, chat, so(args[0]), args.slice(1).join(" "));
   }
-  else if (cmd === "/nha") await tg("sendMessage", { chat_id: chat, text: props.length
-    ? props.map((x: any) => `• ${x.name} (${x.code}) — ${(x.aliases ?? []).join(", ") || "chưa có bí danh"}`).join("\n")
-    : "Bạn chưa được giao nhà nào, hoặc hệ thống chưa có nhà." });
-  else if (cmd === "/viec") await listOpen(p, chat, arg, props);
-  else if (cmd === "/xong" || cmd === "/xoa") {
-    const id = Number(args[0]);
-    if (!id) await tg("sendMessage", { chat_id: chat, text: `Cú pháp: ${cmd} 12` });
-    else {
-      const patch = cmd === "/xong" ? { status: "done" } : { deleted_at: new Date().toISOString() };
-      const { data, error } = await db.from("tasks").update(patch).eq("id", id).select("id,title").maybeSingle();
-      await tg("sendMessage", { chat_id: chat, text: data ? `${cmd === "/xong" ? "✅ Xong" : "🗑 Đã xóa"} #${id}: ${data.title}`
-        : error && cmd === "/xoa" ? "🚫 Chỉ quản trị viên được xóa việc."
-        : `Không có việc #${id}, hoặc bạn không có quyền sửa việc này.` });
-    }
-  } else if (cmd.startsWith("/")) await tg("sendMessage", { chat_id: chat, text: "Không hiểu lệnh này. Gõ /help." });
+  else if (cmd === "/nha") {
+    // RLS lọc sẵn: người bị giới hạn chỉ thấy nhà và căn được giao
+    const props = (await db.from("properties").select("id,name,code,aliases").eq("active", true).order("sort")).data ?? [];
+    const dsCan = (await db.from("units").select("name,property_id").eq("active", true).order("sort")).data ?? [];
+    await tg("sendMessage", {
+      chat_id: chat,
+      text: props.length
+        ? props.map((x: any) => {
+          const can = dsCan.filter((u: any) => u.property_id === x.id).map((u: any) => u.name);
+          return `🏠 ${x.name} (${x.code})\n   căn: ${can.join(", ") || "—"}\n   gọi tắt: ${(x.aliases ?? []).join(", ") || "—"}`;
+        }).join("\n")
+        : "Bạn chưa được giao nhà nào, hoặc hệ thống chưa có nhà.",
+    });
+  }
+  else if (["/viec", "/xong", "/xoa"].includes(cmd))
+    await tg("sendMessage", { chat_id: chat, text: `Lễ tân không còn ghi/sửa việc. Việc cần làm xem trên Mô Hub:\n${HUB}/viec.html` });
+  else if (cmd.startsWith("/")) await tg("sendMessage", { chat_id: chat, text: "Không hiểu lệnh này. Gõ /help." });
   else if (await xuLyDatPhong(ctx, chat, text)) {
     // tin nhắn đặt phòng đã được xử lý (kể cả khi bị từ chối vì không có quyền)
   }
-  else {
-    const parsed = parseTask(text, props);
-    if (parsed.property || !props.length) await createTask(p, chat, parsed.row, parsed.property?.name ?? null);
-    else {
-      // Không nhận ra nhà → hỏi lại bằng nút, không đoán
-      const { data: draft, error } = await db.from("bot_drafts").insert({ text }).select().single();
-      if (error || !draft) { await tg("sendMessage", { chat_id: chat, text: laLoiQuyen(error) ? KHONG_QUYEN_GHI : "❌ Lỗi: " + error?.message }); return; }
-      const rows = [];
-      for (let i = 0; i < props.length; i += 3)
-        rows.push(props.slice(i, i + 3).map((x: any) => ({ text: x.name, callback_data: `p:${draft.id}:${x.id}` })));
-      rows.push([{ text: "Không thuộc nhà nào", callback_data: `p:${draft.id}:none` }]);
-      await tg("sendMessage", { chat_id: chat, text: `Việc này của nhà nào?\n“${text}”`, reply_markup: { inline_keyboard: rows } });
-    }
-  }
+  else if (laViec(text))
+    await tg("sendMessage", { chat_id: chat, text: `Đây có vẻ là việc cần làm. Lễ tân chỉ lo booking — việc ghi trên Mô Hub nhé:\n${HUB}/viec.html` });
+  else
+    await tg("sendMessage", {
+      chat_id: chat,
+      text: "Tôi chưa thấy tên căn và ngày trong tin này.\nVí dụ:\n  Gừng 10-12/10 anh Nam 0905123456\n  căn nào trống 20/10 3 đêm\n  tìm Anna\nGõ /help để xem đủ cách nhắn.",
+    });
 }

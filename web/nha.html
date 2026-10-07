@@ -25,7 +25,7 @@
         <button class="btn chinh" id="btnThemNha">Thêm nhà</button>
         <a class="btn" href="index.html">← Về Hub</a>
       </div>
-      <p class="muted">Sửa ở đây là sửa nguồn dữ liệu gốc: trang Giao việc, Thư kí Telegram và trang cho khách đều lấy từ đây.</p>
+      <p class="muted">Sửa ở đây là sửa nguồn dữ liệu gốc: trang Giao việc, Lễ tân Telegram và trang cho khách đều lấy từ đây.</p>
       <div id="ds"></div>
     </div>
   </div>
@@ -39,7 +39,7 @@
       <div><label>Thứ tự hiện</label><input id="nSort" type="number" min="1"></div>
     </div>
     <label>Tên nhà</label><input id="nName" maxlength="120" placeholder="Nhà Sen">
-    <label>Bí danh — cách gọi khi nhắn Thư kí, ngăn nhau bằng dấu phẩy</label>
+    <label>Bí danh — cách gọi khi nhắn Lễ tân, ngăn nhau bằng dấu phẩy</label>
     <input id="nAlias" placeholder="nhà sen, căn sen, sen house">
     <p class="muted" id="nAliasCanh"></p>
     <div class="hang">
@@ -155,7 +155,7 @@ function ve() {
       </div>
       <div class="muted" style="padding:6px 0">
         ${p.is_published ? "Đang hiện trên trang cho khách" : "Chưa xuất bản ra trang cho khách"}
-        · Bí danh Thư kí: ${(p.aliases ?? []).length ? esc((p.aliases ?? []).join(", ")) : "chưa có"}
+        · Bí danh Lễ tân: ${(p.aliases ?? []).length ? esc((p.aliases ?? []).join(", ")) : "chưa có"}
       </div>
       ${ds.map((u) => `<div class="link-hang">
         <div class="ten">${esc(u.name)}${u.active ? "" : ` <span class="muted">(ngưng dùng)</span>`}
@@ -180,7 +180,7 @@ function ve() {
 function kiemBiDanh() {
   const ngan = $("#nAlias").value.split(",").map((s) => s.trim()).filter((s) => s && s.length < 4);
   $("#nAliasCanh").innerHTML = ngan.length
-    ? `<span style="color:var(--canh-bao)">Bí danh quá ngắn dễ khớp nhầm khi nhắn Thư kí: ${esc(ngan.join(", "))}. Nên dùng cụm 2 chữ, ví dụ “nhà sen”.</span>`
+    ? `<span style="color:var(--canh-bao)">Bí danh quá ngắn dễ khớp nhầm khi nhắn Lễ tân: ${esc(ngan.join(", "))}. Nên dùng cụm 2 chữ, ví dụ “nhà sen”.</span>`
     : "";
 }
 

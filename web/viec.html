@@ -129,7 +129,7 @@ function render() {
     (!tim || `${t.title} ${t.detail ?? ""} ${t.assignee ?? ""} ${t.location ?? ""}`.toLowerCase().includes(tim)));
   if (!rows.length) {
     const msg = { open: "Không còn việc nào đang mở.", done: "Chưa có việc hoàn thành.", trash: "Không có việc bị xóa." }[tab];
-    return ($("#list").innerHTML = `<div class="trong">${msg}${tab === "open" && me.canEdit ? "<br>Bấm “Thêm việc” hoặc nhắn cho Thư kí trên Telegram." : ""}</div>`);
+    return ($("#list").innerHTML = `<div class="trong">${msg}${tab === "open" && me.canEdit ? "<br>Bấm “Thêm việc” để ghi việc mới." : ""}</div>`);
   }
   const groups = new Map();
   for (const t of rows) { const k = t.property_id ?? "none"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }

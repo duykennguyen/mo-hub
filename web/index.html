@@ -51,7 +51,7 @@
       </div>
       <div class="o hide" id="oNha">
         <h3><a href="nha.html">Quản lý nhà</a></h3>
-        <p class="muted">Tên nhà và các căn, giá niêm yết, bí danh cho Thư kí, bật/tắt xuất bản ra trang khách.</p>
+        <p class="muted">Tên nhà và các căn, giá niêm yết, bí danh cho Lễ tân, bật/tắt xuất bản ra trang khách.</p>
         <div class="hanh-dong"><a class="btn" href="nha.html">Mở quản lý nhà</a></div>
       </div>
       <div class="o hide" id="oBan">
@@ -77,7 +77,7 @@
     </section>
 
     <section id="secTelegram">
-      <h2>Thư kí Telegram</h2>
+      <h2>Lễ tân Telegram</h2>
       <p class="muted" id="tgTrangThai">Đang xem…</p>
       <button class="btn chinh" id="tgKetNoi">Kết nối Telegram</button>
       <div id="tgMa" class="hide" style="margin-top:12px"></div>
@@ -169,7 +169,7 @@ Mo.gate(async (me) => {
   };
 });
 
-// ---------- Thư kí Telegram ----------
+// ---------- Lễ tân Telegram ----------
 // Mỗi người tự liên kết Telegram của mình bằng mã dùng một lần (hạn 10 phút).
 // Sau khi liên kết, bot làm đúng theo quyền của tài khoản này (RLS trong database).
 const BOT_TELEGRAM = "ThuKiMo_bot";
@@ -306,7 +306,7 @@ async function loadMembers() {
   $("#memList").onclick = async (e) => {
     if (e.target.dataset.quyen) return openQuyen((data ?? []).find((p) => p.id === e.target.dataset.quyen));
     if (e.target.dataset.ngat) {
-      if (!confirm("Ngắt liên kết Telegram này? Chat đó sẽ không ra lệnh cho Thư kí được nữa.")) return;
+      if (!confirm("Ngắt liên kết Telegram này? Chat đó sẽ không ra lệnh cho Lễ tân được nữa.")) return;
       const { error } = await sb.rpc("thu_hoi_lien_ket_telegram", { p_chat: Number(e.target.dataset.ngat) });
       toast(error ? "Lỗi: " + error.message : "Đã ngắt liên kết Telegram"); return loadMembers();
     }
