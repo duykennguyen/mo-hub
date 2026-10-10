@@ -1,6 +1,8 @@
 {
+  "id": "./",
   "name": "Mô Hub",
   "short_name": "Mô Hub",
+  "description": "Hệ thống vận hành nội bộ Mô Đi Phê",
   "lang": "vi",
   "start_url": "./",
   "scope": "./",

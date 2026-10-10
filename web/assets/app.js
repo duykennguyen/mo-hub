@@ -179,5 +179,45 @@
     onReady({ ...p, canEdit: ["admin", "manager", "staff"].includes(p.role), isAdmin: p.role === "admin" });
   }
 
-  window.Mo = { sb, C, esc, $, toast, copy, gate, vnToday, ddmm, when };
+  // ===== Cài như ứng dụng (PWA) =====
+  // Service worker là điều kiện để Chrome/Edge/Cốc Cốc/Samsung hiện nút "Cài đặt".
+  if ("serviceWorker" in navigator) {
+    addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+  const dangLaApp = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const BO_QUA = "mo_bo_qua_cai_app";
+  const daBoQua = () => { try { return localStorage.getItem(BO_QUA) === "1"; } catch { return false; } };
+  const laIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  function hienGoiYCai(noiDung, nut) {
+    if (dangLaApp || daBoQua() || $(".cai-app")) return;
+    const el = document.createElement("div");
+    el.className = "cai-app";
+    el.innerHTML = `<img src="assets/icon-192.png" alt=""><div class="nd"><b>Cài Mô Hub lên màn hình</b>${noiDung}</div>
+      ${nut ? `<button class="btn chinh nho" id="caiNgay">Cài</button>` : ""}<button class="btn chu" id="caiDong" aria-label="Đóng">✕</button>`;
+    document.body.appendChild(el);
+    $("#caiDong").onclick = () => { el.remove(); try { localStorage.setItem(BO_QUA, "1"); } catch { /* bỏ qua */ } };
+    if (nut) $("#caiNgay").onclick = nut;
+  }
+
+  // Android / máy tính: trình duyệt báo sẵn sàng cài → hiện nút Cài một chạm
+  addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    hienGoiYCai("Mở thẳng từ màn hình chính, như một ứng dụng.", async () => {
+      e.prompt();
+      await e.userChoice;
+      $(".cai-app")?.remove();
+    });
+  });
+  addEventListener("appinstalled", () => { $(".cai-app")?.remove(); toast("Đã cài Mô Hub"); });
+
+  // iPhone/iPad không có nút cài tự động: chỉ cách làm bằng tay
+  if (laIOS && !dangLaApp) {
+    const laSafari = /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios|zalo|fban|fbav|instagram/i.test(navigator.userAgent);
+    addEventListener("load", () => hienGoiYCai(laSafari
+      ? "Bấm nút Chia sẻ <b style='display:inline'>⬆︎</b> ở thanh dưới → chọn <b style='display:inline'>Thêm vào MH chính</b>."
+      : "Mở trang này bằng <b style='display:inline'>Safari</b>, rồi bấm Chia sẻ ⬆︎ → <b style='display:inline'>Thêm vào MH chính</b>."));
+  }
+
+  window.Mo = { sb, C, esc, $, toast, copy, gate, vnToday, ddmm, when, dangLaApp };
 })();

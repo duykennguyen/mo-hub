@@ -165,3 +165,12 @@ dialog .chan { background: var(--kem); display: flex; justify-content: flex-end;
 .tien td { padding: 6px 8px; border-bottom: 1px solid var(--vien); }
 .tien td.so { text-align: right; white-space: nowrap; }
 .tien tr.tre td { color: var(--canh-bao); }
+
+/* Gợi ý cài Mô Hub lên màn hình chính (ẩn khi đã mở dưới dạng ứng dụng) */
+.cai-app { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 480px; margin: 0 auto; z-index: 50;
+  background: var(--giay); border: 1px solid var(--vien); border-radius: 12px; padding: 12px 14px;
+  box-shadow: 0 6px 24px rgba(58, 50, 48, .15); display: flex; gap: 12px; align-items: center; }
+.cai-app img { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+.cai-app .nd { flex: 1; font-size: .88rem; color: var(--tro); }
+.cai-app .nd b { display: block; color: var(--muc); font-size: .95rem; }
+.cai-app .btn { flex: none; }
