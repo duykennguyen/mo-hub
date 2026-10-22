@@ -13,8 +13,8 @@
   --tro: #5C504D;       /* chữ phụ */
   --vien: #C9B6A4;      /* đường kẻ */
   --canh-bao: #9C3327;
-  --vang-dam: #946A12;  /* vàng đậm — nút giá trên trang Gửi đối tác (chữ trắng đạt 4.8:1) */
-  --vang-toi: #73520D;  /* vàng đậm khi bấm/rê chuột */  /* đỏ gạch — CHỈ dùng cho quá hạn / việc gấp */
+  --nut-gia: #6E4F3E;   /* nâu Mô đậm hơn chữ "Mô House" một bậc — nút trên trang Gửi đối tác */
+  --nut-gia-toi: #573E30; /* khi bấm/rê chuột */
   --serif: "Lora", Georgia, "Book Antiqua", serif;
   --sans: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
