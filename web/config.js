@@ -11,6 +11,7 @@ window.MO_CONFIG = {
   SALE_SITE_URL: "https://duykennguyen.github.io/mo-house-ban/",
 
   PUBLIC_SITES: [
+    { name: "Gửi đối tác", url: "https://duykennguyen.github.io/mo-hub/doi-tac.html", note: "Một link cho sale, môi giới: chi tiết căn, ảnh, thuê dài hạn và ngắn hạn. Quản trị viên mở để sửa link" },
     { name: "Mô - Villa Hội An", url: "https://duykennguyen.github.io/mo-house/", note: "Danh mục nhà cho thuê — gửi khách, môi giới" },
     { name: "Mô Bedding", url: "https://duykennguyen.github.io/mo-bedding/", note: "Chăn ga gối eco — catalog cho khách" },
     { name: "Mô House - Nhà bán", url: "https://duykennguyen.github.io/mo-house-ban/", note: "Tài sản đang chào bán — gửi khách mua, môi giới" },

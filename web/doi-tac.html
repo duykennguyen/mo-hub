@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#E1D2C5">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<meta name="robots" content="noindex, nofollow">
+<title>Mô House · Thông tin cho đối tác</title>
+<meta property="og:title" content="Mô House · Thông tin cho đối tác">
+<meta property="og:description" content="Chi tiết căn, ảnh phòng, giá thuê dài hạn và ngắn hạn các nhà Mô House tại Hội An.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css?v=4">
+<style>
+  /* Riêng trang đối tác: nút to cho điện thoại */
+  .dt-the { display: block; width: 100%; text-align: left; padding: 16px; font-size: 1.05rem; margin-bottom: 10px; }
+  .dt-the b { font-family: var(--serif); font-size: 1.2rem; color: var(--nau-dam); }
+  .dt-the small { display: block; color: var(--tro); margin-top: 2px; }
+  .dt-nut { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .dt-nut a, .dt-nut span { display: flex; align-items: center; justify-content: center; min-height: 64px;
+    text-align: center; text-decoration: none; font-weight: 500; }
+  .dt-nut span { opacity: .45; }
+  .dt-dan { margin: 4px 0 14px; }
+  .dt-sua { margin-top: 18px; padding: 12px; border: 1px dashed var(--vien); border-radius: 8px; }
+  .dt-sua input[type=url], .dt-sua input[type=text] { width: 100%; }
+  .dt-an { opacity: .55; }
+  @media (max-width: 380px) { .dt-nut { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="doi-tac.html"><b>Mô House</b><span>Thông tin cho đối tác</span></a>
+    <div class="who" id="who"></div>
+  </header>
+  <main id="noiDung"><p class="muted">Đang tải…</p></main>
+  <p class="muted" style="margin-top:28px;font-size:.85rem">
+    <button class="btn chu" id="chepTrang">Chép link trang này</button>
+    · <a href="index.html" id="dangNhap">Quản trị viên đăng nhập</a>
+  </p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js?v=5"></script>
+<script>
+// Trang công khai: ai có link cũng xem được (đọc view public_partner_units).
+// Admin đã đăng nhập trên Mô Hub (cùng trình duyệt) thì thấy thêm ô sửa ngay tại chỗ.
+const C = window.MO_CONFIG;
+const sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = (s) => document.querySelector(s);
+const NUT = [
+  ["link_chi_tiet", "Chi tiết căn"],
+  ["link_anh", "Ảnh phòng"],
+  ["link_dai_han", "Thuê dài hạn"],
+  ["link_ngan_han", "Thuê ngắn hạn"],
+];
+let nha = [];          // [{code, title, sort, published, property_id, units:[…]}]
+let laAdmin = false;
+let conLai = { nha: [], can: [] };   // nhà / căn chưa đưa vào trang (chỉ admin)
+
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+}
+async function chep(text) {
+  try { await navigator.clipboard.writeText(text); toast("Đã chép link"); } catch { prompt("Chép link này:", text); }
+}
+const theoThuTu = (a, b) => a.sort - b.sort || a.title.localeCompare(b.title, "vi");
+
+async function taiCong() {
+  const { data, error } = await sb.from("public_partner_units").select("*");
+  if (error) throw error;
+  const theoMa = {};
+  for (const r of data) {
+    const n = theoMa[r.house_code] ||= { code: r.house_code, title: r.house_title, sort: r.house_sort, published: true, units: [] };
+    n.units.push({ unit_id: r.unit_id, title: r.unit_title, sort: r.unit_sort, published: true,
+      link_chi_tiet: r.link_chi_tiet, link_anh: r.link_anh, link_dai_han: r.link_dai_han, link_ngan_han: r.link_ngan_han });
+  }
+  return Object.values(theoMa);
+}
+
+// Admin đọc bảng gốc để thấy cả mục đang ẩn và mục chưa đưa vào
+async function taiAdmin() {
+  const [h, u, p, un] = await Promise.all([
+    sb.from("partner_houses").select("*"),
+    sb.from("partner_units").select("*"),
+    sb.from("properties").select("id, code, name, active, sort").eq("active", true),
+    sb.from("units").select("id, property_id, name, active, sort").eq("active", true),
+  ]);
+  for (const r of [h, u, p, un]) if (r.error) throw r.error;
+  const pTheoId = Object.fromEntries(p.data.map((x) => [x.id, x]));
+  const uTheoId = Object.fromEntries(un.data.map((x) => [x.id, x]));
+  const ds = h.data.filter((x) => pTheoId[x.property_id]).map((x) => ({
+    code: pTheoId[x.property_id].code, title: x.title, sort: x.sort, published: x.published,
+    property_id: x.property_id, units: [] }));
+  const theoProp = Object.fromEntries(ds.map((n) => [n.property_id, n]));
+  for (const r of u.data) {
+    const can = uTheoId[r.unit_id]; const n = can && theoProp[can.property_id];
+    if (n) n.units.push({ ...r });
+  }
+  const daCoCan = new Set(u.data.map((r) => r.unit_id));
+  conLai = {
+    nha: p.data.filter((x) => !theoProp[x.id]).sort((a, b) => a.sort - b.sort),
+    can: un.data.filter((x) => !daCoCan.has(x.id)),
+  };
+  return ds;
+}
+
+async function nap() {
+  try { nha = laAdmin ? await taiAdmin() : await taiCong(); }
+  catch (e) { $("#noiDung").innerHTML = `<p class="muted">Chưa tải được danh sách (${esc(e.message)}). Kiểm tra mạng rồi tải lại trang.</p>`; return; }
+  nha.sort(theoThuTu); nha.forEach((n) => n.units.sort(theoThuTu));
+  ve();
+}
+
+// Định tuyến bằng dấu # để gửi riêng được link từng nhà / từng căn
+function ve() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  const n = nha.find((x) => x.code === q.get("n"));
+  const c = n && n.units.find((x) => x.unit_id === q.get("c"));
+  if (c) return veCan(n, c);
+  if (n) return veNha(n);
+  veDanhSach();
+}
+
+function veDanhSach() {
+  const dsNha = nha.filter((n) => n.units.length || laAdmin);
+  $("#noiDung").innerHTML = `
+    <h2>Chọn nhà</h2>
+    ${dsNha.length ? "" : `<p class="muted">Chưa có nhà nào.</p>`}
+    ${dsNha.map((n) => `<a class="btn dt-the ${n.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}">
+      <b>${esc(n.title)}</b><small>${n.units.length === 1 ? "Nguyên căn" : n.units.length + " căn"}${n.published ? "" : " · đang ẩn"}</small></a>`).join("")}
+    ${laAdmin && conLai.nha.length ? `<div class="dt-sua"><b>Thêm nhà vào trang</b>
+      ${conLai.nha.map((p) => `<button class="btn nho" data-them-nha="${p.id}" style="margin:6px 6px 0 0">+ ${esc(p.name)}</button>`).join("")}</div>` : ""}`;
+}
+
+function veNha(n) {
+  // Nhà chỉ có 1 căn (Sen, Biển…): khách không phải bấm thêm một lần
+  if (n.units.length === 1 && !laAdmin) return veCan(n, n.units[0], true);
+  const canThem = laAdmin ? conLai.can.filter((u) => u.property_id === n.property_id) : [];
+  $("#noiDung").innerHTML = `
+    <p class="dt-dan"><a href="#">← Tất cả nhà</a></p>
+    <h2>${esc(n.title)}</h2>
+    ${n.units.length ? "" : `<p class="muted">Chưa có căn nào.</p>`}
+    ${n.units.map((u) => `<a class="btn dt-the ${u.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}&c=${u.unit_id}">
+      <b>${esc(u.title)}</b>${u.published ? "" : "<small>đang ẩn</small>"}</a>`).join("")}
+    ${laAdmin ? `<div class="dt-sua"><b>Sửa nhà</b>
+      <label>Tên hiện cho đối tác</label><input type="text" id="sTenNha" value="${esc(n.title)}">
+      <label>Thứ tự</label><input type="number" id="sThuTuNha" value="${n.sort}" style="width:100px">
+      <label class="chon"><input type="checkbox" id="sHienNha" ${n.published ? "checked" : ""}> Hiện nhà này trên trang</label>
+      <button class="btn chinh" id="luuNha" style="margin-top:10px">Lưu nhà</button>
+      ${canThem.length ? `<p style="margin-top:12px"><b>Thêm căn</b></p>
+        ${canThem.map((u) => `<button class="btn nho" data-them-can="${u.id}" data-ten="${esc(u.name)}" style="margin:6px 6px 0 0">+ ${esc(u.name)}</button>`).join("")}` : ""}
+    </div>` : ""}`;
+  if (laAdmin) $("#luuNha").onclick = () => luu("partner_houses", "property_id", n.property_id, {
+    title: $("#sTenNha").value.trim() || n.title,
+    sort: Number($("#sThuTuNha").value) || 0,
+    published: $("#sHienNha").checked,
+  });
+}
+
+function veCan(n, u, motCan = false) {
+  $("#noiDung").innerHTML = `
+    <p class="dt-dan"><a href="#">← Tất cả nhà</a>${motCan ? "" : ` · <a href="#n=${encodeURIComponent(n.code)}">${esc(n.title)}</a>`}</p>
+    <h2>${esc(n.title)}${motCan || u.title === "Nguyên căn" ? "" : " · " + esc(u.title)}</h2>
+    <div class="dt-nut">
+      ${NUT.map(([k, ten]) => u[k]
+        ? `<a class="btn chinh" href="${esc(u[k])}" target="_blank" rel="noopener">${ten}</a>`
+        : `<span class="btn" title="Chưa có tài liệu">${ten}<br>(chưa có)</span>`).join("")}
+    </div>
+    ${laAdmin ? `<div class="dt-sua"><b>Sửa căn</b>
+      <p class="muted">Dán link Drive (bật "Bất kỳ ai có đường liên kết đều xem được"). Để trống thì nút hiện "chưa có".</p>
+      <label>Tên căn hiện cho đối tác</label><input type="text" id="sTen" value="${esc(u.title)}">
+      ${NUT.map(([k, ten]) => `<label>${ten}</label><input type="url" id="s_${k}" value="${esc(u[k] || "")}" placeholder="https://drive.google.com/…">`).join("")}
+      <label>Thứ tự</label><input type="number" id="sThuTu" value="${u.sort}" style="width:100px">
+      <label class="chon"><input type="checkbox" id="sHien" ${u.published ? "checked" : ""}> Hiện căn này trên trang</label>
+      <button class="btn chinh" id="luuCan" style="margin-top:10px">Lưu căn</button>
+    </div>` : ""}`;
+  if (!laAdmin) return;
+  $("#luuCan").onclick = () => {
+    const ban = { title: $("#sTen").value.trim() || u.title, sort: Number($("#sThuTu").value) || 0, published: $("#sHien").checked };
+    for (const [k, ten] of NUT) {
+      const v = $("#s_" + k).value.trim();
+      if (v && !/^https:\/\/\S+$/.test(v)) return toast(`Link "${ten}" phải bắt đầu bằng https:// và không có dấu cách`);
+      ban[k] = v || null;
+    }
+    luu("partner_units", "unit_id", u.unit_id, ban);
+  };
+}
+
+async function luu(bang, khoa, id, ban) {
+  const { error } = await sb.from(bang).update(ban).eq(khoa, id);
+  if (error) return toast("Chưa lưu được: " + error.message);
+  toast("Đã lưu"); await nap();
+}
+
+$("#noiDung").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-them-nha],[data-them-can]");
+  if (!b) return;
+  b.disabled = true;
+  const { error } = b.dataset.themNha
+    ? await sb.from("partner_houses").insert({ property_id: b.dataset.themNha, title: b.textContent.replace(/^\+\s*/, ""), sort: 99 })
+    : await sb.from("partner_units").insert({ unit_id: b.dataset.themCan, title: b.dataset.ten, sort: 99 });
+  if (error) { b.disabled = false; return toast("Chưa thêm được: " + error.message); }
+  toast("Đã thêm — nhớ dán link rồi Lưu"); await nap();
+});
+$("#chepTrang").onclick = () => chep(location.href);
+addEventListener("hashchange", () => { ve(); scrollTo(0, 0); });
+
+(async () => {
+  // Đã đăng nhập Mô Hub trên trình duyệt này và là admin → bật chế độ sửa
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    const { data: p } = await sb.from("profiles").select("role, status, full_name, email").eq("id", session.user.id).maybeSingle();
+    laAdmin = p?.status === "approved" && p?.role === "admin";
+    if (laAdmin) {
+      $("#who").innerHTML = `Chế độ sửa · ${esc(p.full_name || p.email)} <a class="btn chu" href="index.html">Về Mô Hub</a>`;
+      $("#dangNhap").classList.add("hide");
+    }
+  }
+  await nap();
+})();
+</script>
+</body>
+</html>
