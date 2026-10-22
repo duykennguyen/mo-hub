@@ -80,7 +80,7 @@ async function taiCong() {
   const theoMa = {};
   for (const r of data) {
     const n = theoMa[r.house_code] ||= { code: r.house_code, title: r.house_title, subtitle: r.house_subtitle, sort: r.house_sort, published: true, units: [] };
-    n.units.push({ unit_id: r.unit_id, title: r.unit_title, sort: r.unit_sort, published: true,
+    n.units.push({ unit_id: r.unit_id, title: r.unit_title, subtitle: r.unit_subtitle, sort: r.unit_sort, published: true,
       link_chi_tiet: r.link_chi_tiet, link_anh: r.link_anh, link_dai_han: r.link_dai_han, link_ngan_han: r.link_ngan_han });
   }
   return Object.values(theoMa);
@@ -150,7 +150,7 @@ function veNha(n) {
     <h2>${esc(n.title)}</h2>${n.subtitle ? `<p class="muted dt-dan">${esc(n.subtitle)}</p>` : ""}
     ${n.units.length ? "" : `<p class="muted">Chưa có căn nào.</p>`}
     <div class="dt-luoi">${n.units.map((u) => `<a class="btn dt-the ${u.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}&c=${u.unit_id}">
-      <b>${esc(u.title)}</b>${u.published ? "" : "<small>đang ẩn</small>"}</a>`).join("")}</div>
+      <b>${esc(u.title)}</b>${u.subtitle || !u.published ? `<small>${esc(u.subtitle || "")}${u.published ? "" : (u.subtitle ? " · " : "") + "đang ẩn"}</small>` : ""}</a>`).join("")}</div>
     ${laAdmin ? `<div class="dt-sua"><b>Sửa nhà</b>
       <label>Tên hiện cho đối tác</label><input type="text" id="sTenNha" value="${esc(n.title)}">
       <label>Chú thích nhỏ bên dưới</label><input type="text" id="sChuThichNha" value="${esc(n.subtitle || "")}" placeholder="6 apartments - An Mỹ">
@@ -171,7 +171,7 @@ function veNha(n) {
 function veCan(n, u, motCan = false) {
   $("#noiDung").innerHTML = `
     <p class="dt-dan"><a href="#">← Tất cả nhà</a>${motCan ? "" : ` · <a href="#n=${encodeURIComponent(n.code)}">${esc(n.title)}</a>`}</p>
-    <h2>${esc(n.title)}${motCan || u.title === "Nguyên căn" ? "" : " · " + esc(u.title)}</h2>${motCan && n.subtitle ? `<p class="muted dt-dan">${esc(n.subtitle)}</p>` : ""}
+    <h2>${esc(n.title)}${motCan || u.title === "Nguyên căn" ? "" : " · " + esc(u.title)}</h2>${(motCan ? n.subtitle : u.subtitle) ? `<p class="muted dt-dan">${esc(motCan ? [n.subtitle, u.subtitle].filter(Boolean).join(" · ") : u.subtitle)}</p>` : ""}
     <div class="dt-nut">
       ${NUT.map(([k, ten]) => u[k]
         ? `<a class="btn chinh" href="${esc(u[k])}" target="_blank" rel="noopener">${ten}</a>`
@@ -180,6 +180,7 @@ function veCan(n, u, motCan = false) {
     ${laAdmin ? `<div class="dt-sua"><b>Sửa căn</b>
       <p class="muted">Dán link Drive (bật "Bất kỳ ai có đường liên kết đều xem được"). Để trống thì nút hiện "chưa có".</p>
       <label>Tên căn hiện cho đối tác</label><input type="text" id="sTen" value="${esc(u.title)}">
+      <label>Ghi chú ngắn (hiện dưới tên căn)</label><input type="text" id="sGhiChu" value="${esc(u.subtitle || "")}" placeholder="Tầng 2 · 1 phòng ngủ · ban công nhìn ruộng">
       ${NUT.map(([k, ten]) => `<label>${ten}</label><input type="url" id="s_${k}" value="${esc(u[k] || "")}" placeholder="https://drive.google.com/…">`).join("")}
       <label>Thứ tự</label><input type="number" id="sThuTu" value="${u.sort}" style="width:100px">
       <label class="chon"><input type="checkbox" id="sHien" ${u.published ? "checked" : ""}> Hiện căn này trên trang</label>
@@ -187,7 +188,7 @@ function veCan(n, u, motCan = false) {
     </div>` : ""}`;
   if (!laAdmin) return;
   $("#luuCan").onclick = () => {
-    const ban = { title: $("#sTen").value.trim() || u.title, sort: Number($("#sThuTu").value) || 0, published: $("#sHien").checked };
+    const ban = { title: $("#sTen").value.trim() || u.title, subtitle: $("#sGhiChu").value.trim() || null, sort: Number($("#sThuTu").value) || 0, published: $("#sHien").checked };
     for (const [k, ten] of NUT) {
       const v = $("#s_" + k).value.trim();
       if (v && !/^https:\/\/\S+$/.test(v)) return toast(`Link "${ten}" phải bắt đầu bằng https:// và không có dấu cách`);
