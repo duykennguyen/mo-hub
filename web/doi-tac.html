@@ -11,7 +11,7 @@
 <meta property="og:description" content="Chi tiết căn, ảnh phòng, giá thuê dài hạn và ngắn hạn các nhà Mô House tại Hội An.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css?v=4">
+<link rel="stylesheet" href="assets/style.css?v=5">
 <style>
   /* Riêng trang đối tác: nút to cho điện thoại */
   .dt-the { display: block; width: 100%; text-align: left; padding: 16px; font-size: 1.05rem; margin-bottom: 10px; text-decoration: none; }
@@ -22,21 +22,21 @@
   @media (max-width: 560px) { .dt-luoi.hai { grid-template-columns: 1fr; } }
   .dt-the b { font-family: var(--serif); font-size: 1.2rem; color: var(--nau-dam); }
   .dt-the small { display: block; color: var(--tro); margin-top: 2px; }
-  .dt-nut { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; max-width: 720px; }
-  .dt-nut a, .dt-nut span { display: flex; align-items: center; justify-content: center; min-height: 64px;
-    text-align: center; text-decoration: none; font-weight: 500; }
-  .dt-nut span { opacity: .45; }
+  .dt-nut { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; max-width: 720px; }
+  .dt-nut a, .dt-nut span, .dt-nut button { display: flex; align-items: center; justify-content: center; min-height: 48px;
+    padding: 8px 6px; text-align: center; text-decoration: none; font: inherit; font-weight: 600; font-size: .95rem; line-height: 1.25; }
+  .dt-nut .vang { background: var(--vang-dam); border-color: var(--vang-dam); color: #fff; }
+  .dt-nut .vang:hover, .dt-nut .vang.dang-mo { background: var(--vang-toi); border-color: var(--vang-toi); }
+  .dt-nut span { opacity: .45; font-weight: 500; font-size: .85rem; }
   .dt-dan { margin: 4px 0 14px; }
   .dt-sua { margin-top: 18px; padding: 12px; border: 1px dashed var(--vien); border-radius: 8px; }
   .dt-sua input[type=url], .dt-sua input[type=text] { width: 100%; }
   .dt-an { opacity: .55; }
-  .dt-nut button { min-height: 64px; font: inherit; font-weight: 500; }
-  .dt-nut .btn.dang-mo { outline: 3px solid var(--reu); outline-offset: 2px; }
   .dt-noi-dung { margin-top: 14px; max-width: 720px; padding: 16px; background: var(--giay); border: 1px solid var(--vien);
     border-radius: 8px; white-space: pre-line; line-height: 1.6; }
   .dt-noi-dung h3 { margin: 0 0 8px; }
   .dt-sua textarea { width: 100%; min-height: 110px; font: inherit; }
-  @media (max-width: 380px) { .dt-nut, .dt-luoi { grid-template-columns: 1fr; } }
+  @media (max-width: 380px) { .dt-luoi { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -62,8 +62,8 @@ const sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const $ = (s) => document.querySelector(s);
 // [cột link, tên nút, cột nội dung viết thẳng trên trang]
+// Chi tiết căn không còn là nút: hiện thẳng trên trang căn (xem veCan)
 const NUT = [
-  ["link_chi_tiet", "Chi tiết căn", "noi_dung_chi_tiet"],
   ["link_anh", "Ảnh phòng", null],
   ["link_dai_han", "Thuê dài hạn", "noi_dung_dai_han"],
   ["link_ngan_han", "Thuê ngắn hạn", "noi_dung_ngan_han"],
@@ -177,18 +177,27 @@ function veNha(n) {
 function veCan(n, u, motCan = false) {
   // Nút có nội dung viết sẵn → mở khung chữ ngay dưới; chỉ có link → mở link; không có gì → "chưa có"
   const nut = NUT.map(([k, ten, nd], i) => u[nd]?.trim()
-    ? `<button class="btn chinh" data-mo="${i}">${ten}</button>`
-    : u[k] ? `<a class="btn chinh" href="${esc(u[k])}" target="_blank" rel="noopener">${ten}</a>`
-    : `<span class="btn" title="Chưa có tài liệu">${ten}<br>(chưa có)</span>`).join("");
+    ? `<button class="btn vang" data-mo="${i}">${ten}</button>`
+    : u[k] ? `<a class="btn vang" href="${esc(u[k])}" target="_blank" rel="noopener">${ten}</a>`
+    : `<span class="btn" title="Chưa có">${ten}<br>(chưa có)</span>`).join("");
+  const chiTiet = u.noi_dung_chi_tiet?.trim()
+    ? `<div class="dt-noi-dung">${esc(u.noi_dung_chi_tiet.trim())}${u.link_chi_tiet
+        ? `
+
+<a class="btn" href="${esc(u.link_chi_tiet)}" target="_blank" rel="noopener">Mở tài liệu</a>` : ""}</div>`
+    : u.link_chi_tiet ? `<p><a class="btn" href="${esc(u.link_chi_tiet)}" target="_blank" rel="noopener">Xem chi tiết căn</a></p>` : "";
   $("#noiDung").innerHTML = `
     <p class="dt-dan"><a href="#">← Tất cả nhà</a>${motCan ? "" : ` · <a href="#n=${encodeURIComponent(n.code)}">${esc(n.title)}</a>`}</p>
     <h2>${esc(n.title)}${motCan || u.title === "Nguyên căn" ? "" : " · " + esc(u.title)}</h2>${(motCan ? n.subtitle : u.subtitle) ? `<p class="muted dt-dan">${esc(motCan ? [n.subtitle, u.subtitle].filter(Boolean).join(" · ") : u.subtitle)}</p>` : ""}
     <div class="dt-nut">${nut}</div>
     <div id="khungNoiDung"></div>
+    ${chiTiet}
     ${laAdmin ? `<div class="dt-sua"><b>Sửa căn</b>
       <p class="muted">Ô nội dung: viết thẳng lên trang, xuống dòng giữ nguyên. Ô link: dán link Drive (bật "Bất kỳ ai có đường liên kết đều xem được"). Có cả hai thì trang hiện nội dung kèm nút mở tài liệu.</p>
       <label>Tên căn hiện cho đối tác</label><input type="text" id="sTen" value="${esc(u.title)}">
       <label>Ghi chú ngắn (hiện dưới tên căn)</label><input type="text" id="sGhiChu" value="${esc(u.subtitle || "")}" placeholder="Tầng 2 · 1 phòng ngủ · ban công nhìn ruộng">
+      <label>Chi tiết căn — nội dung (hiện thẳng trên trang)</label><textarea id="s_noi_dung_chi_tiet" style="min-height:180px">${esc(u.noi_dung_chi_tiet || "")}</textarea>
+      <label>Chi tiết căn — link (không bắt buộc)</label><input type="url" id="s_link_chi_tiet" value="${esc(u.link_chi_tiet || "")}" placeholder="https://drive.google.com/…">
       ${NUT.map(([k, ten, nd]) => `${nd ? `<label>${ten} — nội dung</label><textarea id="s_${nd}">${esc(u[nd] || "")}</textarea>` : ""}
         <label>${ten} — link</label><input type="url" id="s_${k}" value="${esc(u[k] || "")}" placeholder="https://drive.google.com/…">`).join("")}
       <label>Thứ tự</label><input type="number" id="sThuTu" value="${u.sort}" style="width:100px">
@@ -196,7 +205,11 @@ function veCan(n, u, motCan = false) {
       <button class="btn chinh" id="luuCan" style="margin-top:10px">Lưu căn</button>
     </div>` : ""}`;
 
+  let dangMo = null;
   const moKhung = (i) => {
+    if (dangMo === i) { dangMo = null; $("#khungNoiDung").innerHTML = "";
+      return document.querySelectorAll("[data-mo]").forEach((b) => b.classList.remove("dang-mo")); }
+    dangMo = i;
     const [k, ten, nd] = NUT[i];
     document.querySelectorAll("[data-mo]").forEach((b) => b.classList.toggle("dang-mo", b.dataset.mo == i));
     $("#khungNoiDung").innerHTML = `<div class="dt-noi-dung"><h3>${ten}</h3>${esc(u[nd].trim())}${u[k]
@@ -205,13 +218,11 @@ function veCan(n, u, motCan = false) {
 <a class="btn" href="${esc(u[k])}" target="_blank" rel="noopener">Mở tài liệu</a>` : ""}</div>`;
   };
   document.querySelectorAll("[data-mo]").forEach((b) => (b.onclick = () => moKhung(+b.dataset.mo)));
-  const dau = document.querySelector("[data-mo]");
-  if (dau) moKhung(+dau.dataset.mo);   // mở sẵn mục đầu tiên có nội dung (thường là Chi tiết căn)
 
   if (!laAdmin) return;
   $("#luuCan").onclick = () => {
     const ban = { title: $("#sTen").value.trim() || u.title, subtitle: $("#sGhiChu").value.trim() || null, sort: Number($("#sThuTu").value) || 0, published: $("#sHien").checked };
-    for (const [k, ten, nd] of NUT) {
+    for (const [k, ten, nd] of [["link_chi_tiet", "Chi tiết căn", "noi_dung_chi_tiet"], ...NUT]) {
       const v = $("#s_" + k).value.trim();
       if (v && !/^https:\/\/\S+$/.test(v)) return toast(`Link "${ten}" phải bắt đầu bằng https:// và không có dấu cách`);
       ban[k] = v || null;
