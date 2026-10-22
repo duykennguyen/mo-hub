@@ -35,6 +35,20 @@
   .dt-noi-dung { margin-top: 14px; max-width: 720px; padding: 16px; background: var(--giay); border: 1px solid var(--vien);
     border-radius: 8px; white-space: pre-line; line-height: 1.6; }
   .dt-noi-dung h3 { margin: 0 0 8px; }
+  .dt-noi-dung.dinh-dang { white-space: normal; }
+  .dt-noi-dung p { margin: 0 0 8px; }
+  .dt-noi-dung h4 { margin: 16px 0 6px; font-family: var(--serif); font-size: 1.05rem; color: var(--nau-dam); }
+  .dt-noi-dung ul { margin: 0 0 8px; padding: 0; list-style: none; }
+  .dt-noi-dung li { position: relative; padding: 6px 0 6px 22px; border-bottom: 1px dashed var(--vien); }
+  .dt-noi-dung li:last-child { border-bottom: none; }
+  .dt-noi-dung li::before { content: ""; position: absolute; left: 4px; top: 14px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--nut-gia); }
+  /* Chi tiết căn: khối nổi bật nhất trang */
+  .dt-chi-tiet { margin-top: 18px; padding: 20px 22px; border: 1px solid var(--vien); border-left: 5px solid var(--nut-gia);
+    box-shadow: 0 2px 10px rgba(58, 50, 48, .08); }
+  .dt-chi-tiet > h3 { font-family: var(--serif); font-size: 1.35rem; color: var(--nau-dam); margin-bottom: 10px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--vien); }
+  .dt-chi-tiet .mo-dau { font-family: var(--serif); font-size: 1.12rem; font-weight: 600; color: var(--muc); }
   .dt-sua textarea { width: 100%; min-height: 110px; font: inherit; }
   @media (max-width: 380px) { .dt-luoi { grid-template-columns: 1fr; } }
 </style>
@@ -71,6 +85,27 @@ const NUT = [
 let nha = [];          // [{code, title, sort, published, property_id, units:[…]}]
 let laAdmin = false;
 let conLai = { nha: [], can: [] };   // nhà / căn chưa đưa vào trang (chỉ admin)
+
+// Biến chữ thường thành HTML gọn: dòng bắt đầu bằng • / - thành gạch đầu dòng, dòng ngắn mở đầu
+// một đoạn (sau dòng trống) thành tiêu đề nhỏ, dòng đầu tiên là câu mở đầu. Mọi chữ đều qua esc().
+function dinhDang(text) {
+  const doan = text.trim().split(/\n\s*\n/);
+  return doan.map((d, i) => {
+    const dong = d.split("\n").map((x) => x.trim()).filter(Boolean);
+    let html = "", ds = [];
+    const xa = () => { if (ds.length) { html += `<ul>${ds.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`; ds = []; } };
+    dong.forEach((x, j) => {
+      const m = x.match(/^[•\-–]\s*(.*)$/);
+      if (m) return ds.push(m[1]);
+      xa();
+      if (i === 0 && j === 0) html += `<p class="mo-dau">${esc(x)}</p>`;
+      else if (j === 0 && x.length <= 40 && !/[.:]$/.test(x)) html += `<h4>${esc(x)}</h4>`;
+      else html += `<p>${esc(x)}</p>`;
+    });
+    xa();
+    return html;
+  }).join("");
+}
 
 function toast(msg) {
   const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
@@ -181,10 +216,8 @@ function veCan(n, u, motCan = false) {
     : u[k] ? `<a class="btn gia" href="${esc(u[k])}" target="_blank" rel="noopener">${ten}</a>`
     : `<span class="btn" title="Chưa có">${ten}<br>(chưa có)</span>`).join("");
   const chiTiet = u.noi_dung_chi_tiet?.trim()
-    ? `<div class="dt-noi-dung">${esc(u.noi_dung_chi_tiet.trim())}${u.link_chi_tiet
-        ? `
-
-<a class="btn" href="${esc(u.link_chi_tiet)}" target="_blank" rel="noopener">Mở tài liệu</a>` : ""}</div>`
+    ? `<div class="dt-noi-dung dinh-dang dt-chi-tiet"><h3>Chi tiết căn</h3>${dinhDang(u.noi_dung_chi_tiet)}${u.link_chi_tiet
+        ? `<p><a class="btn" href="${esc(u.link_chi_tiet)}" target="_blank" rel="noopener">Mở tài liệu</a></p>` : ""}</div>`
     : u.link_chi_tiet ? `<p><a class="btn" href="${esc(u.link_chi_tiet)}" target="_blank" rel="noopener">Xem chi tiết căn</a></p>` : "";
   $("#noiDung").innerHTML = `
     <p class="dt-dan"><a href="#">← Tất cả nhà</a>${motCan ? "" : ` · <a href="#n=${encodeURIComponent(n.code)}">${esc(n.title)}</a>`}</p>
@@ -212,10 +245,8 @@ function veCan(n, u, motCan = false) {
     dangMo = i;
     const [k, ten, nd] = NUT[i];
     document.querySelectorAll("[data-mo]").forEach((b) => b.classList.toggle("dang-mo", b.dataset.mo == i));
-    $("#khungNoiDung").innerHTML = `<div class="dt-noi-dung"><h3>${ten}</h3>${esc(u[nd].trim())}${u[k]
-      ? `
-
-<a class="btn" href="${esc(u[k])}" target="_blank" rel="noopener">Mở tài liệu</a>` : ""}</div>`;
+    $("#khungNoiDung").innerHTML = `<div class="dt-noi-dung dinh-dang"><h3>${ten}</h3>${dinhDang(u[nd])}${u[k]
+      ? `<p><a class="btn" href="${esc(u[k])}" target="_blank" rel="noopener">Mở tài liệu</a></p>` : ""}</div>`;
   };
   document.querySelectorAll("[data-mo]").forEach((b) => (b.onclick = () => moKhung(+b.dataset.mo)));
 
