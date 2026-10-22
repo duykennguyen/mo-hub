@@ -14,10 +14,13 @@
 <link rel="stylesheet" href="assets/style.css?v=4">
 <style>
   /* Riêng trang đối tác: nút to cho điện thoại */
-  .dt-the { display: block; width: 100%; text-align: left; padding: 16px; font-size: 1.05rem; margin-bottom: 10px; }
+  .dt-the { display: block; width: 100%; text-align: left; padding: 16px; font-size: 1.05rem; margin-bottom: 10px; text-decoration: none; }
+  .dt-luoi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .dt-luoi .dt-the { margin-bottom: 0; }
+  @media (max-width: 900px) { .dt-luoi { grid-template-columns: repeat(2, 1fr); } }
   .dt-the b { font-family: var(--serif); font-size: 1.2rem; color: var(--nau-dam); }
   .dt-the small { display: block; color: var(--tro); margin-top: 2px; }
-  .dt-nut { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .dt-nut { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; max-width: 720px; }
   .dt-nut a, .dt-nut span { display: flex; align-items: center; justify-content: center; min-height: 64px;
     text-align: center; text-decoration: none; font-weight: 500; }
   .dt-nut span { opacity: .45; }
@@ -25,7 +28,7 @@
   .dt-sua { margin-top: 18px; padding: 12px; border: 1px dashed var(--vien); border-radius: 8px; }
   .dt-sua input[type=url], .dt-sua input[type=text] { width: 100%; }
   .dt-an { opacity: .55; }
-  @media (max-width: 380px) { .dt-nut { grid-template-columns: 1fr; } }
+  @media (max-width: 380px) { .dt-nut, .dt-luoi { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -74,7 +77,7 @@ async function taiCong() {
   if (error) throw error;
   const theoMa = {};
   for (const r of data) {
-    const n = theoMa[r.house_code] ||= { code: r.house_code, title: r.house_title, sort: r.house_sort, published: true, units: [] };
+    const n = theoMa[r.house_code] ||= { code: r.house_code, title: r.house_title, subtitle: r.house_subtitle, sort: r.house_sort, published: true, units: [] };
     n.units.push({ unit_id: r.unit_id, title: r.unit_title, sort: r.unit_sort, published: true,
       link_chi_tiet: r.link_chi_tiet, link_anh: r.link_anh, link_dai_han: r.link_dai_han, link_ngan_han: r.link_ngan_han });
   }
@@ -93,7 +96,7 @@ async function taiAdmin() {
   const pTheoId = Object.fromEntries(p.data.map((x) => [x.id, x]));
   const uTheoId = Object.fromEntries(un.data.map((x) => [x.id, x]));
   const ds = h.data.filter((x) => pTheoId[x.property_id]).map((x) => ({
-    code: pTheoId[x.property_id].code, title: x.title, sort: x.sort, published: x.published,
+    code: pTheoId[x.property_id].code, title: x.title, subtitle: x.subtitle, sort: x.sort, published: x.published,
     property_id: x.property_id, units: [] }));
   const theoProp = Object.fromEntries(ds.map((n) => [n.property_id, n]));
   for (const r of u.data) {
@@ -131,7 +134,7 @@ function veDanhSach() {
     <h2>Chọn nhà</h2>
     ${dsNha.length ? "" : `<p class="muted">Chưa có nhà nào.</p>`}
     ${dsNha.map((n) => `<a class="btn dt-the ${n.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}">
-      <b>${esc(n.title)}</b><small>${n.units.length === 1 ? "Nguyên căn" : n.units.length + " căn"}${n.published ? "" : " · đang ẩn"}</small></a>`).join("")}
+      <b>${esc(n.title)}</b><small>${esc(n.subtitle || (n.units.length === 1 ? "Nguyên căn" : n.units.length + " căn"))}${n.published ? "" : " · đang ẩn"}</small></a>`).join("")}
     ${laAdmin && conLai.nha.length ? `<div class="dt-sua"><b>Thêm nhà vào trang</b>
       ${conLai.nha.map((p) => `<button class="btn nho" data-them-nha="${p.id}" style="margin:6px 6px 0 0">+ ${esc(p.name)}</button>`).join("")}</div>` : ""}`;
 }
@@ -142,12 +145,13 @@ function veNha(n) {
   const canThem = laAdmin ? conLai.can.filter((u) => u.property_id === n.property_id) : [];
   $("#noiDung").innerHTML = `
     <p class="dt-dan"><a href="#">← Tất cả nhà</a></p>
-    <h2>${esc(n.title)}</h2>
+    <h2>${esc(n.title)}</h2>${n.subtitle ? `<p class="muted dt-dan">${esc(n.subtitle)}</p>` : ""}
     ${n.units.length ? "" : `<p class="muted">Chưa có căn nào.</p>`}
-    ${n.units.map((u) => `<a class="btn dt-the ${u.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}&c=${u.unit_id}">
-      <b>${esc(u.title)}</b>${u.published ? "" : "<small>đang ẩn</small>"}</a>`).join("")}
+    <div class="dt-luoi">${n.units.map((u) => `<a class="btn dt-the ${u.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}&c=${u.unit_id}">
+      <b>${esc(u.title)}</b>${u.published ? "" : "<small>đang ẩn</small>"}</a>`).join("")}</div>
     ${laAdmin ? `<div class="dt-sua"><b>Sửa nhà</b>
       <label>Tên hiện cho đối tác</label><input type="text" id="sTenNha" value="${esc(n.title)}">
+      <label>Chú thích nhỏ bên dưới</label><input type="text" id="sChuThichNha" value="${esc(n.subtitle || "")}" placeholder="6 apartments - An Mỹ">
       <label>Thứ tự</label><input type="number" id="sThuTuNha" value="${n.sort}" style="width:100px">
       <label class="chon"><input type="checkbox" id="sHienNha" ${n.published ? "checked" : ""}> Hiện nhà này trên trang</label>
       <button class="btn chinh" id="luuNha" style="margin-top:10px">Lưu nhà</button>
@@ -156,6 +160,7 @@ function veNha(n) {
     </div>` : ""}`;
   if (laAdmin) $("#luuNha").onclick = () => luu("partner_houses", "property_id", n.property_id, {
     title: $("#sTenNha").value.trim() || n.title,
+    subtitle: $("#sChuThichNha").value.trim() || null,
     sort: Number($("#sThuTuNha").value) || 0,
     published: $("#sHienNha").checked,
   });
@@ -164,7 +169,7 @@ function veNha(n) {
 function veCan(n, u, motCan = false) {
   $("#noiDung").innerHTML = `
     <p class="dt-dan"><a href="#">← Tất cả nhà</a>${motCan ? "" : ` · <a href="#n=${encodeURIComponent(n.code)}">${esc(n.title)}</a>`}</p>
-    <h2>${esc(n.title)}${motCan || u.title === "Nguyên căn" ? "" : " · " + esc(u.title)}</h2>
+    <h2>${esc(n.title)}${motCan || u.title === "Nguyên căn" ? "" : " · " + esc(u.title)}</h2>${motCan && n.subtitle ? `<p class="muted dt-dan">${esc(n.subtitle)}</p>` : ""}
     <div class="dt-nut">
       ${NUT.map(([k, ten]) => u[k]
         ? `<a class="btn chinh" href="${esc(u[k])}" target="_blank" rel="noopener">${ten}</a>`
