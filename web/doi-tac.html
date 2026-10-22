@@ -18,6 +18,8 @@
   .dt-luoi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .dt-luoi .dt-the { margin-bottom: 0; }
   @media (max-width: 900px) { .dt-luoi { grid-template-columns: repeat(2, 1fr); } }
+  .dt-luoi.hai { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 560px) { .dt-luoi.hai { grid-template-columns: 1fr; } }
   .dt-the b { font-family: var(--serif); font-size: 1.2rem; color: var(--nau-dam); }
   .dt-the small { display: block; color: var(--tro); margin-top: 2px; }
   .dt-nut { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; max-width: 720px; }
@@ -133,8 +135,8 @@ function veDanhSach() {
   $("#noiDung").innerHTML = `
     <h2>Chọn nhà</h2>
     ${dsNha.length ? "" : `<p class="muted">Chưa có nhà nào.</p>`}
-    ${dsNha.map((n) => `<a class="btn dt-the ${n.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}">
-      <b>${esc(n.title)}</b><small>${esc(n.subtitle || (n.units.length === 1 ? "Nguyên căn" : n.units.length + " căn"))}${n.published ? "" : " · đang ẩn"}</small></a>`).join("")}
+    <div class="dt-luoi hai">${dsNha.map((n) => `<a class="btn dt-the ${n.published ? "" : "dt-an"}" href="#n=${encodeURIComponent(n.code)}">
+      <b>${esc(n.title)}</b><small>${esc(n.subtitle || (n.units.length === 1 ? "Nguyên căn" : n.units.length + " căn"))}${n.published ? "" : " · đang ẩn"}</small></a>`).join("")}</div>
     ${laAdmin && conLai.nha.length ? `<div class="dt-sua"><b>Thêm nhà vào trang</b>
       ${conLai.nha.map((p) => `<button class="btn nho" data-them-nha="${p.id}" style="margin:6px 6px 0 0">+ ${esc(p.name)}</button>`).join("")}</div>` : ""}`;
 }
